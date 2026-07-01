@@ -1,10 +1,9 @@
 import asyncio
 import os
-import telegram
 from telegram import (
-    InlineQueryResultArticle, 
-    InputTextMessageContent, 
-    InlineKeyboardMarkup, 
+    InlineQueryResultArticle,
+    InputTextMessageContent,
+    InlineKeyboardMarkup,
     InlineKeyboardButton
 )
 from telegram.ext import (
@@ -15,60 +14,71 @@ from telegram.ext import (
     MessageHandler,
     InlineQueryHandler,
     filters,
-    JobQueue
 )
+
 from handlers.rps_game_handler import register_rps_handlers
 from config import BOT_TOKEN, PANEL_BOT_TOKEN, supabase
 from handlers.client_manager import load_existing_sessions
+
 from handlers.auth_handler import (
     MAIN_MENU, START_PAYMENT, PHONE, CODE, PASSWORD, ENTER_INVITE_CODE,
     start, handle_main_menu_clicks,
     handle_go_to_pay, handle_activation_payment, handle_cancel_to_menu,
     get_phone, handle_code_calculator_clicks, get_password, cancel
 )
+
 from handlers.dice_game import (
     game_buttons_callback,
     handle_balance_request,
     handle_transfer_request,
 )
+
 from handlers.panel_handler import handle_panel_clicks
 
-# ⚙️ اینلاین هندلر اختصاصی برای پنل سلف‌بات
+
+# -----------------------------
+# INLINE PANEL HANDLER
+# -----------------------------
 async def inline_panel_handler(update, context):
     try:
         inline_query = update.inline_query
-        if not inline_query:
+        if not inline_query or inline_query.query != "get_self_panel":
             return
-            
-        query = inline_query.query
-        if query == 'get_self_panel':
-            user_id = inline_query.from_user.id
-            keyboard = [
-                [
-                    InlineKeyboardButton("👤 اکانت من", callback_data=f"panel_acc_{user_id}"),
-                    InlineKeyboardButton("مدیریت و راهنمایی", callback_data=f"panel_sett_{user_id}")
-                ],
-                [
-                    InlineKeyboardButton("❌ بستن پنل", callback_data=f"panel_close_{user_id}")
-                ]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            results = [
-                InlineQueryResultArticle(
-                    id=f"p_{user_id}_{update.update_id}",
-                    title="🤖 پنل مدیریت سلف‌بات",
-                    description="ارسال منوی مدیریت تودرتو",
-                    input_message_content=InputTextMessageContent(
-                        f"› **Panel Management**\n\nبه منوی مدیریت هوما خوش آمدید. لطفاً یک بخش را انتخاب کنید:"
-                    ),
-                    reply_markup=reply_markup
-                )
-            ]
-            await inline_query.answer(results, cache_time=0)
-    except Exception as e:
-        print(f"Error in async panel inline: {e}")
 
-# 📦 ساختار مدیریت وضعیت سراسری
+        user_id = inline_query.from_user.id
+
+        keyboard = [
+            [
+                InlineKeyboardButton("👤 اکانت من", callback_data=f"panel_acc_{user_id}"),
+                InlineKeyboardButton("مدیریت", callback_data=f"panel_sett_{user_id}")
+            ],
+            [
+                InlineKeyboardButton("❌ بستن", callback_data=f"panel_close_{user_id}")
+            ]
+        ]
+
+        results = [
+            InlineQueryResultArticle(
+                id=f"panel_{user_id}_{update.update_id}",
+                title="Panel Management",
+                description="Open user panel",
+                input_message_content=InputTextMessageContent(
+                    "Panel opened. Choose an option:"
+                ),
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        ]
+
+        # cache مهم برای جلوگیری از فشار
+        await inline_query.answer(results, cache_time=30)
+
+    except Exception as e:
+        print(f"[inline_panel_handler error]: {e}")
+
+
+# -----------------------------
+# CONVERSATION HANDLER
+# -----------------------------
 conv_handler = ConversationHandler(
     entry_points=[
         CommandHandler("start", start),
@@ -78,97 +88,149 @@ conv_handler = ConversationHandler(
         MAIN_MENU: [
             CallbackQueryHandler(handle_cancel_to_menu, pattern="^cancel_to_menu$"),
             CallbackQueryHandler(handle_go_to_pay, pattern="^go_to_pay_\\d+$"),
-            CallbackQueryHandler(handle_main_menu_clicks, pattern="^gold_.*$"),
-            CallbackQueryHandler(handle_main_menu_clicks, pattern="^.*$"),
+            CallbackQueryHandler(handle_main_menu_clicks, pattern="^(gold_|menu_|btn_)"),
         ],
+
         START_PAYMENT: [
             CallbackQueryHandler(handle_activation_payment, pattern="^pay_activation$"),
             CallbackQueryHandler(handle_cancel_to_menu, pattern="^cancel_to_menu$"),
         ],
+
         PHONE: [
             CallbackQueryHandler(handle_cancel_to_menu, pattern="^cancel_to_menu$"),
             MessageHandler(filters.CONTACT, get_phone),
             MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone),
         ],
+
         CODE: [
             CallbackQueryHandler(handle_code_calculator_clicks, pattern="^code_"),
             CallbackQueryHandler(handle_cancel_to_menu, pattern="^cancel_to_menu$"),
         ],
+
         PASSWORD: [
             CallbackQueryHandler(handle_cancel_to_menu, pattern="^cancel_to_menu$"),
             MessageHandler(filters.TEXT & ~filters.COMMAND, get_password),
         ],
+
         ENTER_INVITE_CODE: [
             CallbackQueryHandler(handle_cancel_to_menu, pattern="^cancel_to_menu$"),
-            MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u, c: __import__('handlers.auth_handler', fromlist=['process_invite_code_input']).process_invite_code_input(u, c)),
+            MessageHandler(
+                filters.TEXT & ~filters.COMMAND,
+                lambda u, c: __import__('handlers.auth_handler',
+                fromlist=['process_invite_code_input']
+                ).process_invite_code_input(u, c)
+            ),
         ],
     },
-    fallbacks=[CommandHandler("cancel", cancel), CommandHandler("start", start)],
+
+    fallbacks=[
+        CommandHandler("cancel", cancel),
+        CommandHandler("start", start)
+    ],
+
     allow_reentry=True,
 )
 
+
+# -----------------------------
+# JOB (OPTIMIZED)
+# -----------------------------
 async def deduct_diamonds_job(context):
     try:
-        res = supabase.table("users_diamonds").select("user_id, diamonds").eq("is_active", True).execute()
-        if res.data:
-            for user in res.data:
-                if user["user_id"] in [8004897709, 8668275780]: continue
-                if user["diamonds"] >= 2:
-                    supabase.table("users_diamonds").update({"diamonds": user["diamonds"] - 2}).eq("user_id", user["user_id"]).execute()
-                else:
-                    supabase.table("users_diamonds").update({"is_active": False}).eq("user_id", user["user_id"]).execute()
-    except Exception as e:
-        print(f"❌ خطا در عملیات کسر الماس: {e}")
+        res = supabase.table("users_diamonds") \
+            .select("user_id, diamonds") \
+            .eq("is_active", True) \
+            .execute()
 
+        if not res.data:
+            return
+
+        for user in res.data:
+            uid = user["user_id"]
+
+            if uid in (8004897709, 8668275780):
+                continue
+
+            new_value = user["diamonds"] - 2
+
+            if new_value > 0:
+                supabase.table("users_diamonds") \
+                    .update({"diamonds": new_value}) \
+                    .eq("user_id", uid) \
+                    .execute()
+            else:
+                supabase.table("users_diamonds") \
+                    .update({"diamonds": 0, "is_active": False}) \
+                    .eq("user_id", uid) \
+                    .execute()
+
+            # جلوگیری از فشار شبکه
+            await asyncio.sleep(0.05)
+
+    except Exception as e:
+        print(f"[deduct_diamonds_job error]: {e}")
+
+
+# -----------------------------
+# MAIN STARTUP LOOP
+# -----------------------------
 async def start_dual_bots():
     os.makedirs("new_sessions", exist_ok=True)
-    
-    while True: # حلقه اصلی برای بازگشت در صورت بروز خطا
-        # متغیرهای اپلیکیشن را خارج از try تعریف می‌کنیم تا در finally در دسترس باشند
+
+    while True:
         main_app = None
         panel_app = None
-        
+
         try:
-            print("🚀 در حال مقداردهی سیستم هوما...")
-            
-            # 1. ساخت اپلیکیشن‌ها
-            main_app = Application.builder().token(BOT_TOKEN).job_queue(JobQueue()).build()
+            print("🚀 Starting system...")
+
+            # apps
+            main_app = Application.builder().token(BOT_TOKEN).build()
             panel_app = Application.builder().token(PANEL_BOT_TOKEN).build()
-            
-            # 2. ثبت هندلرها
+
+            # handlers
             main_app.add_handler(conv_handler)
             main_app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r"^طلا"), handle_balance_request))
             main_app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r"^واریز طلا \d+$"), handle_transfer_request))
+
             register_rps_handlers(main_app)
             main_app.add_handler(CallbackQueryHandler(game_buttons_callback, pattern="^game_"))
-            main_app.job_queue.run_repeating(deduct_diamonds_job, interval=3600, first=60)
 
+            # job queue (built-in)
+            main_app.job_queue.run_repeating(
+                deduct_diamonds_job,
+                interval=3600,
+                first=60
+            )
+
+            # panel bot
             import handlers.panel_handler
             handlers.panel_handler.panel_bot_app = panel_app
-            panel_app.add_handler(CallbackQueryHandler(handle_panel_clicks)) 
+
+            panel_app.add_handler(CallbackQueryHandler(handle_panel_clicks))
             panel_app.add_handler(InlineQueryHandler(inline_panel_handler))
 
-            # 3. راه اندازی
+            # sessions
             await load_existing_sessions()
+
+            # init
             await main_app.initialize()
             await panel_app.initialize()
+
             await main_app.start()
             await panel_app.start()
-            
-            # حذف پارامتر restart_on_failure برای سازگاری با همه نسخه‌ها
+
             await main_app.updater.start_polling(drop_pending_updates=True)
             await panel_app.updater.start_polling(drop_pending_updates=True)
-            
-            print("✅ سیستم هوما با موفقیت فعال شد.")
-            
-            # انتظار برای همیشه
+
+            print("✅ System is running")
+
             await asyncio.Event().wait()
 
         except Exception as e:
-            print(f"⚠️ خطای بحرانی در سیستم: {e}")
-            print("🔄 در حال تلاش برای شروع مجدد در ۱۰ ثانیه...")
-            
-            # توقف ایمن برای جلوگیری از اشغال پورت/سشن
+            print(f"⚠️ Fatal error: {e}")
+            print("🔄 Restarting in 10s...")
+
             try:
                 if main_app:
                     await main_app.stop()
@@ -176,11 +238,17 @@ async def start_dual_bots():
                 if panel_app:
                     await panel_app.stop()
                     await panel_app.shutdown()
-            except Exception as stop_err:
-                print(f"خطا در توقف ربات: {stop_err}")
-                
+            except Exception as se:
+                print(f"Stop error: {se}")
+
             await asyncio.sleep(10)
 
+
+# -----------------------------
+# ENTRY POINT
+# -----------------------------
 if __name__ == "__main__":
-    try: asyncio.run(start_dual_bots())
-    except (KeyboardInterrupt, SystemExit): print("🛑 متوقف شد.")
+    try:
+        asyncio.run(start_dual_bots())
+    except (KeyboardInterrupt, SystemExit):
+        print("🛑 stopped")
