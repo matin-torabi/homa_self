@@ -77,6 +77,9 @@ async def check_sub(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
+    if update.effective_chat.type != 'private':
+        return
+
     if context.args and context.args[0].startswith("inv_"):
         try:
             inviter_id = int(context.args[0].split("_")[1])

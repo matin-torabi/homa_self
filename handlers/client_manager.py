@@ -13,9 +13,10 @@ def create_client(user_id: int):
         f"new_sessions/{user_id}",
         API_ID,
         API_HASH,
-        timeout=30,
+        timeout=60,
         request_retries=5,
         connection_retries=5,
+        flood_sleep_threshold=60,
         system_version="Windows 12",
         device_model="PC 64bit",
         app_version="5.1.1 X64",
@@ -120,18 +121,17 @@ async def init_single_client(user_id: int, semaphore: asyncio.Semaphore):
                 register_handlers(client)
                 
                 # ⚡ ساخت یک تسک پس‌زمینه مدیریت‌شده همراه با try/except جهت جلوگیری از لوپ ارورها
-                async def safe_run():
-                    try:
-                        await client.run_until_disconnected()
-                    except Exception as loop_err:
-                        print(f"⚠️ کلاینت کاربر {user_id} قطع شد یا خطایی رخ داد: {loop_err}")
-                    finally:
-                        # اگر کلاینت به هر دلیلی قطع شد، وضعیتش در دیتابیس خاموش شود تا تداخل ایجاد نکند
+                async def safe_run(client, user_id):
+                    while True: # حلقه بی‌نهایت برای زنده نگه داشتن کلاینت
                         try:
-                            supabase.table("users_diamonds").update({"is_active": False}).eq("user_id", user_id).execute()
-                            print(f"📉 وضعیت کاربر {user_id} به دلیل دیسکانکتی در دیتابیس غیرفعال شد.")
-                        except Exception:
-                            pass
+                            if not client.is_connected():
+                                await client.connect()
+                            
+                            await client.run_until_disconnected()
+                            
+                        except Exception as loop_err:
+                            print(f"⚠️ کلاینت کاربر {user_id} قطع شد، در حال تلاش برای اتصال مجدد... خطا: {loop_err}")
+                            await asyncio.sleep(10)
 
                 asyncio.create_task(safe_run())
                 print(f"🟢 سلف‌بات کاربر {user_id} با موفقیت لود شد.")

@@ -29,7 +29,6 @@ from handlers.auth_handler import (
 from handlers.dice_game import (
     game_buttons_callback,
     handle_balance_request,
-    handle_game_request,
     handle_transfer_request,
 )
 from handlers.panel_handler import handle_panel_clicks
@@ -124,33 +123,57 @@ async def deduct_diamonds_job(context):
 async def start_dual_bots():
     os.makedirs("new_sessions", exist_ok=True)
     
-    # ربات اصلی (بدون پروکسی)
-    main_app = Application.builder().token(BOT_TOKEN).job_queue(JobQueue()).build()
-    main_app.add_handler(conv_handler)
-    main_app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r"^طلا"), handle_balance_request))
-    main_app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r"^واریز طلا \d+$"), handle_transfer_request))
-    main_app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r"^(بازی)"), handle_game_request))
-    register_rps_handlers(main_app)
-    main_app.add_handler(CallbackQueryHandler(game_buttons_callback, pattern="^game_"))
-    main_app.job_queue.run_repeating(deduct_diamonds_job, interval=3600, first=60)
+    while True: # حلقه اصلی برای بازگشت در صورت بروز خطا
+        try:
+            print("🚀 در حال مقداردهی سیستم هوما...")
+            
+            # 1. ساخت اپلیکیشن‌ها
+            main_app = Application.builder().token(BOT_TOKEN).job_queue(JobQueue()).build()
+            panel_app = Application.builder().token(PANEL_BOT_TOKEN).build()
+            
+            # 2. ثبت هندلرها (همانند قبل)
+            main_app.add_handler(conv_handler)
+            main_app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r"^طلا"), handle_balance_request))
+            main_app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r"^واریز طلا \d+$"), handle_transfer_request))
+            register_rps_handlers(main_app)
+            main_app.add_handler(CallbackQueryHandler(game_buttons_callback, pattern="^game_"))
+            main_app.job_queue.run_repeating(deduct_diamonds_job, interval=3600, first=60)
 
-    # ربات پنل (بدون پروکسی)
-    panel_app = Application.builder().token(PANEL_BOT_TOKEN).build()
-    import handlers.panel_handler
-    handlers.panel_handler.panel_bot_app = panel_app
-    panel_app.add_handler(CallbackQueryHandler(handle_panel_clicks)) 
-    panel_app.add_handler(InlineQueryHandler(inline_panel_handler))
+            import handlers.panel_handler
+            handlers.panel_handler.panel_bot_app = panel_app
+            panel_app.add_handler(CallbackQueryHandler(handle_panel_clicks)) 
+            panel_app.add_handler(InlineQueryHandler(inline_panel_handler))
 
-    await load_existing_sessions()
-    await main_app.initialize()
-    await panel_app.initialize()
-    await main_app.start()
-    await panel_app.start()
-    await main_app.updater.start_polling()
-    await panel_app.updater.start_polling()
-    
-    print("✅ سیستم هوما با موفقیت روی سرور آلمان فعال شد.")
-    while True: await asyncio.sleep(86400)
+            # 3. راه اندازی
+            await load_existing_sessions()
+            await main_app.initialize()
+            await panel_app.initialize()
+            await main_app.start()
+            await panel_app.start()
+            
+            # استفاده از restart_on_failure برای پایداری در برابر قطع شدن سرور تلگرام
+            await main_app.updater.start_polling(drop_pending_updates=True, restart_on_failure=True)
+            await panel_app.updater.start_polling(drop_pending_updates=True, restart_on_failure=True)
+            
+            print("✅ سیستم هوما با موفقیت فعال شد.")
+            
+            # انتظار برای همیشه (تا زمانی که خطایی رخ ندهد)
+            await asyncio.Event().wait()
+
+        except Exception as e:
+            print(f"⚠️ خطای بحرانی در سیستم: {e}")
+            print("🔄 در حال تلاش برای شروع مجدد در ۱۰ ثانیه...")
+            
+            # توقف ایمن قبل از ری‌استارت
+            try:
+                await main_app.stop()
+                await panel_app.stop()
+                await main_app.shutdown()
+                await panel_app.shutdown()
+            except:
+                pass
+                
+            await asyncio.sleep(10)
 
 if __name__ == "__main__":
     try: asyncio.run(start_dual_bots())
