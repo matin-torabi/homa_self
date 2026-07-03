@@ -437,7 +437,7 @@ async def handle_panel_clicks(update, context):
             await query.edit_message_text(
                 text=lock_text,
                 parse_mode="Markdown",
-                reply_markup=get_locks_keyboard(owner_id)
+                reply_markup= await get_locks_keyboard(owner_id)
             )
         except Exception as e:
             print(f"⚠️ Error opening locks menu: {e}")
@@ -551,7 +551,7 @@ async def handle_panel_clicks(update, context):
             await query.edit_message_text(
                 text=lock_text,
                 parse_mode="Markdown",
-                reply_markup=get_locks_keyboard(owner_id)
+                reply_markup= await get_locks_keyboard(owner_id)
             )
         except telegram.error.BadRequest:
             pass
@@ -702,7 +702,7 @@ async def handle_panel_clicks(update, context):
         
         # سوییچ کردن: اگر دوباره کلیک شد غیرفعال (none) شود، در غیر این صورت مود جدید فعال شود
         new_mode = "none" if current_mode == selected_mode else selected_mode
-        set_user_text_mode(owner_id, new_mode)
+        await set_user_text_mode(owner_id, new_mode)
         
         menu_text = "⚙️ **تنظیمات حالت متن**\n\nحالت مورد نظر خود را برای فونت خودکار پیام‌ها انتخاب کنید:"
         
