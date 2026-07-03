@@ -24,7 +24,7 @@ def register_auto_reply(bot):
                 print(f"⚠️ خطا در دریافت اطلاعات کلاینت: {e}")
                 return
 
-        res = get_auto_reply_from_db(client.my_own_id)
+        res = await get_auto_reply_from_db(client.my_own_id)
         # مهار کردن نهایی مقدار None
         if res is not None:
             client.reply_config = res
@@ -43,7 +43,7 @@ def register_auto_reply(bot):
         if event.sender_id != bot.my_own_id: return
 
         update_data = {"enabled": True}
-        if save_auto_reply_to_db(bot.my_own_id, update_data):
+        if await save_auto_reply_to_db(bot.my_own_id, update_data):
             bot.reply_config["enabled"] = True
             bot.last_reply_cache.clear() # ریست کردن حافظه موقت جلوگیری از اسپم
             
@@ -63,7 +63,7 @@ def register_auto_reply(bot):
         if event.sender_id != bot.my_own_id: return
 
         update_data = {"enabled": False}
-        if save_auto_reply_to_db(bot.my_own_id, update_data):
+        if await save_auto_reply_to_db(bot.my_own_id, update_data):
             bot.reply_config["enabled"] = False
             bot.last_reply_cache.clear()
             await event.edit("❌ <b>منشی خودکار خاموش شد!</b>", parse_mode="html")
@@ -80,7 +80,7 @@ def register_auto_reply(bot):
             return
         
         update_data = {"message": message}
-        if save_auto_reply_to_db(bot.my_own_id, update_data):
+        if await save_auto_reply_to_db(bot.my_own_id, update_data):
             bot.reply_config['message'] = message
             await event.edit(
                 f"✅ <b>پیام منشی تنظیم شد:</b>\n"
@@ -101,7 +101,7 @@ def register_auto_reply(bot):
                 return
             
             update_data = {"interval": minutes}
-            if save_auto_reply_to_db(bot.my_own_id, update_data):
+            if await save_auto_reply_to_db(bot.my_own_id, update_data):
                 bot.reply_config['interval'] = minutes
                 bot.last_reply_cache.clear()
                 
@@ -119,7 +119,7 @@ def register_auto_reply(bot):
         mode = event.pattern_match.group(1)
         update_data = {"mode": mode}
         
-        if save_auto_reply_to_db(bot.my_own_id, update_data):
+        if await save_auto_reply_to_db(bot.my_own_id, update_data):
             bot.reply_config['mode'] = mode
             bot.last_reply_cache.clear()
             mode_text = "همیشه (هر بار)" if mode == "always" else "هر کاربر یکبار"
@@ -132,7 +132,7 @@ def register_auto_reply(bot):
         if event.sender_id != bot.my_own_id: return
 
         # بروزرسانی کش برای گرفتن آخرین دقیق تغییرات
-        bot.reply_config = get_auto_reply_from_db(bot.my_own_id)
+        bot.reply_config = await get_auto_reply_from_db(bot.my_own_id)
         config = bot.reply_config
 
         status = "✅ روشن" if config['enabled'] else "❌ خاموش"
@@ -165,7 +165,7 @@ def register_auto_reply(bot):
         try:
             me = await event.client.get_me()
             # خواندن زنده از دیتابیس سوپابیس برای مهار تغییرات دکمه شیشه‌ای
-            config = get_auto_reply_from_db(me.id)
+            config = await get_auto_reply_from_db(me.id)
             if config:
                 bot.reply_config = config # آپدیت کردن همزمان کش رَم
         except Exception as e:

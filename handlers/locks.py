@@ -41,7 +41,7 @@ def register_locks(bot):
                 print(f"⚠️ خطا در دریافت اطلاعات کلاینت در بخش قفل: {e}")
                 return
 
-        res = get_user_locks_from_db(client.my_own_id)
+        res = await get_user_locks_from_db(client.my_own_id)
         if res is not None:
             client.my_locks = res
         else:
@@ -217,7 +217,7 @@ def register_locks(bot):
 
         if len(parts) == 1:
             # روشن کردن قفل
-            if save_user_lock_to_db(bot.my_own_id, key, True):
+            if await save_user_lock_to_db(bot.my_own_id, key, True):
                 bot.my_locks[key] = True # بروزرسانی آنی کش کلاینت
                 await event.edit(f"✅ <b>قفل {lock_name}</b> برای شما روشن شد")
             else:
@@ -225,7 +225,7 @@ def register_locks(bot):
 
         elif len(parts) == 2 and parts[1] == "خاموش":
             # خاموش کردن قفل
-            if save_user_lock_to_db(bot.my_own_id, key, False):
+            if await save_user_lock_to_db(bot.my_own_id, key, False):
                 bot.my_locks[key] = False # بروزرسانی آنی کش کلاینت
                 await event.edit(f"❌ <b>قفل {lock_name}</b> برای شما خاموش شد")
             else:
@@ -243,7 +243,7 @@ def register_locks(bot):
             return
 
         # همگام‌سازی مجدد کش با دیتابیس برای اطمینان بیشتر در وضعیت قفل
-        bot.my_locks = get_user_locks_from_db(bot.my_own_id)
+        bot.my_locks = await get_user_locks_from_db(bot.my_own_id)
         locks = bot.my_locks
 
         lock_names_fa = {

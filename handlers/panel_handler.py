@@ -446,7 +446,7 @@ async def handle_panel_clicks(update, context):
         owner_id = int(data.split("_")[2])
         
         from utils import get_auto_reply_from_db
-        config = get_auto_reply_from_db(owner_id)
+        config = await get_auto_reply_from_db(owner_id)
         
         if not config:
             config = {"enabled": False, "message": " الان آنلاین نیستم، بعداً پیام میدم!", "interval": 30, "mode": "once"}
@@ -530,7 +530,7 @@ async def handle_panel_clicks(update, context):
         new_state = not current_locks.get(lock_key, False)
         
         # ذخیره وضعیت جدید در دیتابیس سوپابیس
-        if save_user_lock_to_db(owner_id, lock_key, new_state):
+        if await save_user_lock_to_db(owner_id, lock_key, new_state):
             
             # 🔥 بسیار مهم: آپدیت آنی و زنده کش کلاینت سلف‌بات در حافظه ران‌تایم برای اعمال بدون تاخیر
             try:
@@ -627,7 +627,7 @@ async def handle_panel_clicks(update, context):
         owner_id = int(data.split("_")[2])
         
         from utils import get_auto_seen_from_db
-        config = get_auto_seen_from_db(owner_id)
+        config = await get_auto_seen_from_db(owner_id)
             
         status_word = "روشن" if config.get("auto_seen", True) else "خاموش"
         seen_text = f"<blockquote>وضعیت : {status_word}</blockquote>"
@@ -644,13 +644,13 @@ async def handle_panel_clicks(update, context):
         owner_id = int(data.split("_")[2])
         
         from utils import get_auto_seen_from_db, save_auto_seen_to_db
-        config = get_auto_seen_from_db(owner_id)
+        config = await get_auto_seen_from_db(owner_id)
             
         current_status = config.get("auto_seen", True)
         new_status = not current_status
         
         # ذخیره در جدول مستقل سوپابیس
-        save_auto_seen_to_db(owner_id, new_status)
+        await save_auto_seen_to_db(owner_id, new_status)
         
         # آپدیت آنی کش رم کلاینت‌ها برای سرعت بالا
         from handlers.auto_seen_handler import AUTO_SEEN_CACHE
@@ -821,7 +821,7 @@ async def handle_panel_clicks(update, context):
         new_status = not config.get("enabled", False)
         
         # ذخیره وضعیت جدید به صورت مستقیم در سوپابیس
-        if save_user_filters_to_db(owner_id, {"enabled": new_status}):
+        if await save_user_filters_to_db(owner_id, {"enabled": new_status}):
             config["enabled"] = new_status
             
         words = config.get("words", []) if config.get("words") else []

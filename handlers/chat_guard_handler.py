@@ -264,7 +264,7 @@ def register_chat_guard(bot):
         update_dict = data["guard_config"].copy()
         update_dict["save_deleted"] = status
         
-        if save_chat_guard_to_db(event.client._cached_my_id, update_dict):
+        if await save_chat_guard_to_db(event.client._cached_my_id, update_dict):
             data["guard_config"]["save_deleted"] = status
             await event.edit(f"🔒 ذخیره حذف شده‌ها: {'🟢 روشن' if status else '🔴 خاموش'}")
 
@@ -278,7 +278,7 @@ def register_chat_guard(bot):
         update_dict = data["guard_config"].copy()
         update_dict["save_edited"] = status
         
-        if save_chat_guard_to_db(event.client._cached_my_id, update_dict):
+        if await save_chat_guard_to_db(event.client._cached_my_id, update_dict):
             data["guard_config"]["save_edited"] = status
             await event.edit(f"🔒 ذخیره ویرایش شده‌ها: {'🟢 روشن' if status else '🔴 خاموش'}")
 
@@ -292,7 +292,7 @@ def register_chat_guard(bot):
         update_dict = data["guard_config"].copy()
         update_dict["save_ttl"] = status
         
-        if save_chat_guard_to_db(event.client._cached_my_id, update_dict):
+        if await save_chat_guard_to_db(event.client._cached_my_id, update_dict):
             data["guard_config"]["save_ttl"] = status
             await event.edit(f"🔒 ذخیره عکس تایمی: {'🟢 روشن' if status else '🔴 خاموش'}")
 

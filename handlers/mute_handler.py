@@ -5,7 +5,6 @@ from utils import db_execute
 from config import supabase
 
 # ایمپورت کردن توابع آنلاین سوپابیس از فایل utils
-from utils import get_muted_users_from_db, add_muted_user_to_db, remove_muted_user_from_db
 
 def register_mute_handlers(client):
     """

@@ -36,7 +36,7 @@ def register_word_filter(bot):
         if event.sender_id != bot.my_own_id: return
 
         update_data = {"enabled": True}
-        if save_user_filters_to_db(bot.my_own_id, update_data):
+        if await save_user_filters_to_db(bot.my_own_id, update_data):
             bot.filter_config["enabled"] = True
             words = bot.filter_config.get("words", [])
             
@@ -54,7 +54,7 @@ def register_word_filter(bot):
         if event.sender_id != bot.my_own_id: return
 
         update_data = {"enabled": False}
-        if save_user_filters_to_db(bot.my_own_id, update_data):
+        if await save_user_filters_to_db(bot.my_own_id, update_data):
             bot.filter_config["enabled"] = False
             await event.edit("❌ <b>فیلتر کلمات خاموش شد!</b>", parse_mode="html")
 
@@ -80,7 +80,7 @@ def register_word_filter(bot):
         words.append(word)
         update_data = {"words": words}
         
-        if save_user_filters_to_db(bot.my_own_id, update_data):
+        if await save_user_filters_to_db(bot.my_own_id, update_data):
             bot.filter_config["words"] = words
             await event.edit(
                 f"✅ کلمه <code>{word}</code> به لیست فیلتر اضافه شد!\n"
@@ -105,7 +105,7 @@ def register_word_filter(bot):
         words.remove(word)
         update_data = {"words": words}
         
-        if save_user_filters_to_db(bot.my_own_id, update_data):
+        if await save_user_filters_to_db(bot.my_own_id, update_data):
             bot.filter_config["words"] = words
             await event.edit(
                 f"🗑️ کلمه <code>{word}</code> از لیست فیلتر حذف شد!\n"
@@ -145,7 +145,7 @@ def register_word_filter(bot):
         if event.sender_id != bot.my_own_id: return
 
         update_data = {"words": []}
-        if save_user_filters_to_db(bot.my_own_id, update_data):
+        if await save_user_filters_to_db(bot.my_own_id, update_data):
             bot.filter_config["words"] = []
             await event.edit("🗑️ <b>تمام کلمات از لیست فیلتر شما پاک شدند!</b>", parse_mode="html")
 

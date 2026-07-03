@@ -68,7 +68,7 @@ async def handle_game_request(update: Update, context: ContextTypes.DEFAULT_TYPE
         "status": "waiting",
         "chat_id": chat_id
     }
-    save_game(game_id, game_data)
+    await save_game(game_id, game_data)
 
     keyboard = [
             [InlineKeyboardButton("✅ قبول", callback_data=f"join_{game_id}")],
@@ -102,7 +102,7 @@ async def game_buttons_callback(update: Update, context: ContextTypes.DEFAULT_TY
     user_mention = get_user_mention(user)
 
     action, game_id = data.rsplit("_", 1)
-    game = get_game(game_id)
+    game = await get_game(game_id)
 
     if not game:
         try:
@@ -126,7 +126,7 @@ async def game_buttons_callback(update: Update, context: ContextTypes.DEFAULT_TY
         
         # بازگرداندن طلا به موجودی سازنده در سوپابیس
         update_balance(game["creator_id"], game["amount"])
-        delete_game(game_id)
+        await delete_game(game_id)
         try:
             await query.answer("❌ بازی لغو شد و طلای شما بازگشت.")
             await query.message.delete()
@@ -179,7 +179,7 @@ async def game_buttons_callback(update: Update, context: ContextTypes.DEFAULT_TY
         game["player_2_name"] = user.first_name
         game["player_2_mention"] = user_mention
         game["status"] = "rolling"
-        save_game(game_id, game)
+        await save_game(game_id, game)
 
         # 🔄 انیمیشن چرخیدن تاس‌ها
         dice_emojis = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"]
@@ -230,12 +230,12 @@ async def game_buttons_callback(update: Update, context: ContextTypes.DEFAULT_TY
             update_balance(game["creator_id"], game["amount"])
             update_balance(game["player_2_id"], game["amount"])
             await query.edit_message_caption(caption="🤝 بازی مساوی شد! طلا به هر دو بازگشت.")
-            delete_game(game_id)
+            await delete_game(game_id)
             return
 
         # واریز جایزه به برنده
         update_balance(winner_id, total_prize)
-        delete_game(game_id)
+        await delete_game(game_id)
 
         result_text = (
             f"🏁 <b>نتیجه نهایی رقابت:</b>\n\n"

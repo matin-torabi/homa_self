@@ -23,7 +23,7 @@ def register_utils_handlers(client):
                     first_name = user.first_name if user.first_name else "❌ ندارد"
                     last_name = user.last_name if user.last_name else "❌ ندارد"
                     username = f"@{user.username}" if user.username else "❌ ندارد"
-                    balance = get_balance(user_id)
+                    balance = await get_balance(user_id)
 
                     response = (
                         "👤 **اطلاعات کاربر مورد نظر:**\n\n"

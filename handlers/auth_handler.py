@@ -515,7 +515,7 @@ async def handle_activation_payment(update: Update, context: ContextTypes.DEFAUL
         await query.message.reply_text("⚠️ برای ادامه باید عضو کانال و گروه باشید:", reply_markup=get_join_keyboard())
         return MAIN_MENU
 
-    user_balance = get_balance(user_id)
+    user_balance = await get_balance(user_id)
     REQUIRED_GOLD = 30
 
     if user_balance < REQUIRED_GOLD:
@@ -536,7 +536,7 @@ async def handle_activation_payment(update: Update, context: ContextTypes.DEFAUL
             reward_paid = user_data_db.data[0].get("invite_reward_paid", False)
             
             if inviter_id and not reward_paid:
-                inviter_bal = get_balance(inviter_id)
+                inviter_bal = await get_balance(inviter_id)
                 supabase.table("users_diamonds").update({"diamonds": inviter_bal + 35}).eq("user_id", inviter_id).execute()
                 supabase.table("users_diamonds").update({"invite_reward_paid": True}).eq("user_id", user_id).execute()
                 
@@ -558,7 +558,7 @@ async def handle_activation_payment(update: Update, context: ContextTypes.DEFAUL
     await query.edit_message_text("✅ پرداخت تایید شد. در حال انتقال به مرحله بعد...")
     await query.message.reply_text(
         f"✅ **پرداخت با موفقیت انجام شد!**\n💰 مبلغ {REQUIRED_GOLD} طلا از حساب شما کسر شد.\n"
-        f"🔹 موجودی جدید: {get_balance(user_id)} طلا\n\n"
+        f"🔹 موجودی جدید: {await get_balance(user_id)} طلا\n\n"
         f"👇 برای تکمیل لاگین، روی دکمه بزرگ زیر صفحه بزنید تا شماره تلفنتان ارسال شود:",
         reply_markup=phone_keyboard,
     )

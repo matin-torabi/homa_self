@@ -24,7 +24,7 @@ def register_auto_seen_handler(client):
             if owner_id not in AUTO_SEEN_CACHE:
                 try:
                     from utils import get_auto_seen_from_db
-                    db_status = get_auto_seen_from_db(owner_id)
+                    db_status = await get_auto_seen_from_db(owner_id)
                     AUTO_SEEN_CACHE[owner_id] = bool(db_status) if db_status is not None else False
                 except:
                     AUTO_SEEN_CACHE[owner_id] = False
@@ -63,7 +63,7 @@ def register_auto_seen_handler(client):
         AUTO_SEEN_CACHE[owner_id] = status
         try:
             from utils import save_auto_seen_to_db
-            save_auto_seen_to_db(owner_id, status)
+            await save_auto_seen_to_db(owner_id, status)
         except Exception as db_err:
             print(f"Error saving auto seen status: {db_err}")
         

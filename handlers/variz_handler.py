@@ -25,14 +25,14 @@ def register_variz_handler(client):
                 return
 
             # بررسی موجودی
-            from_balance = get_balance(sender.id)
+            from_balance = await get_balance(sender.id)
             if from_balance < amount:
                 await event.edit(f"❌ موجودی کافی نیست. موجودی فعلی: {from_balance:,}")
                 return
 
             # اعمال تراکنش
-            update_balance(sender.id, -amount)
-            update_balance(target.id, amount)
+            await update_balance(sender.id, -amount)
+            await update_balance(target.id, amount)
 
             # ارسال پیام موفقیت و ویرایش پیام دستور
             await event.edit(

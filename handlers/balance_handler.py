@@ -18,7 +18,7 @@ def register_balance_handler(client):
             return
 
         # گرفتن موجودی به صورت مستقیم و آنلاین از سوپابیس
-        current_balance = get_balance(user.id)
+        current_balance = await get_balance(user.id)
 
         # فرمت کردن عدد (مثلا ۱,۰۰۰)
         formatted_balance = "{:,}".format(current_balance)
