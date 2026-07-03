@@ -3,6 +3,7 @@ import asyncio
 from telethon import TelegramClient
 from config import API_HASH, API_ID
 from config import supabase
+from utils import db_execute  # ایمپورت تابع مدیریت ترد
 
 # دیکشنری‌ها برای مدیریت کلاینت‌ها در وضعیت زنده
 clients = {}
@@ -107,9 +108,6 @@ def register_handlers(client: TelegramClient):
 
 
 async def init_single_client(user_id: int, semaphore: asyncio.Semaphore):
-    """
-    راه‌اندازی امن یک کلاینت مجزا با مدیریت کانکشن تلگرام و آپدیت خودکار دیتابیس
-    """
     async with semaphore:
         try:
             client = create_client(user_id)
@@ -119,17 +117,17 @@ async def init_single_client(user_id: int, semaphore: asyncio.Semaphore):
                 clients[user_id] = client
                 register_handlers(client)
                 
-                # ⚡ ساخت یک تسک پس‌زمینه مدیریت‌شده همراه با try/except جهت جلوگیری از لوپ ارورها
                 async def safe_run():
                     try:
                         await client.run_until_disconnected()
                     except Exception as loop_err:
-                        print(f"⚠️ کلاینت کاربر {user_id} قطع شد یا خطایی رخ داد: {loop_err}")
+                        print(f"⚠️ کلاینت کاربر {user_id} قطع شد: {loop_err}")
                     finally:
-                        # اگر کلاینت به هر دلیلی قطع شد، وضعیتش در دیتابیس خاموش شود تا تداخل ایجاد نکند
                         try:
-                            supabase.table("users_diamonds").update({"is_active": False}).eq("user_id", user_id).execute()
-                            print(f"📉 وضعیت کاربر {user_id} به دلیل دیسکانکتی در دیتابیس غیرفعال شد.")
+                            # تغییر به ساختار جدید
+                            query = supabase.table("users_diamonds").update({"is_active": False}).eq("user_id", user_id)
+                            await db_execute(query)
+                            print(f"📉 وضعیت کاربر {user_id} غیرفعال شد.")
                         except Exception:
                             pass
 
@@ -137,43 +135,39 @@ async def init_single_client(user_id: int, semaphore: asyncio.Semaphore):
                 print(f"🟢 سلف‌بات کاربر {user_id} با موفقیت لود شد.")
             else:
                 await client.disconnect()
-                print(f"🔴 سشن کاربر {user_id} منقضی شده بود و لود نشد. در حال غیرفعال‌سازی...")
-                
-                # ⚙️ آپدیت دیتابیس برای کاربران فاقد اعتبار (سشن‌های پریده)
+                print(f"🔴 سشن کاربر {user_id} منقضی شده بود.")
                 try:
-                    supabase.table("users_diamonds").update({"is_active": False}).eq("user_id", user_id).execute()
+                    query = supabase.table("users_diamonds").update({"is_active": False}).eq("user_id", user_id)
+                    await db_execute(query)
                 except Exception:
                     pass
-                
+        
         except Exception as e:
             print(f"❌ خطا در لود سشن {user_id}: {e}")
-            # در صورت بروز هرگونه خطای بحرانی در اتصال (مثل ارور دیسکانکت شدن در استارت‌آپ)
             try:
-                supabase.table("users_diamonds").update({"is_active": False}).eq("user_id", user_id).execute()
+                query = supabase.table("users_diamonds").update({"is_active": False}).eq("user_id", user_id)
+                await db_execute(query)
             except Exception:
                 pass
         
         await asyncio.sleep(0.1)
 
 async def load_existing_sessions():
-    """این تابع فقط و فقط در زمان استارت اولیه سرور اجرا می‌شود"""
     print("🔍 در حال بررسی و لود سشن‌های موجود...")
     if not os.path.exists("new_sessions"):
         return
 
     valid_users = set()
     try:
-        response = supabase.table("users_diamonds") \
-            .select("user_id") \
-            .gt("diamonds", 0) \
-            .eq("is_active", True) \
-            .execute()
+        # تغییر به ساختار جدید (ایجاد کوئری و سپس await db_execute)
+        query = supabase.table("users_diamonds").select("user_id").gt("diamonds", 0).eq("is_active", True)
+        response = await db_execute(query)
             
         if response.data:
             valid_users = {int(row["user_id"]) for row in response.data}
-        print(f"💎 تعداد {len(valid_users)} کاربر مجاز و فعال از دیتابیس دریافت شد.")
+        print(f"💎 تعداد {len(valid_users)} کاربر مجاز دریافت شد.")
     except Exception as db_error:
-        print(f"⚠️ خطای بحرانی سوپابیس در خواندن یکجای اطلاعات: {db_error}")
+        print(f"⚠️ خطای دیتابیس در خواندن اطلاعات: {db_error}")
         return
 
     session_tasks = []
@@ -184,7 +178,6 @@ async def load_existing_sessions():
             user_id_str = filename.replace(".session", "")
             if user_id_str.isdigit():
                 user_id = int(user_id_str)
-
                 if user_id not in valid_users:
                     continue
 
@@ -192,6 +185,6 @@ async def load_existing_sessions():
                 session_tasks.append(task)
 
     if session_tasks:
-        print(f"⚡ در حال لود موازی {len(session_tasks)} کلاینت مجاز و روشن...")
+        print(f"⚡ در حال لود موازی {len(session_tasks)} کلاینت...")
         await asyncio.gather(*session_tasks)
-        print("✅ فرآیند بارگذاری تمامی کلاینت‌های روشن به پایان رسید.")
+        print("✅ فرآیند بارگذاری به پایان رسید.")        

@@ -6,7 +6,7 @@ import re
 from utils import get_user_locks_from_db, save_user_lock_to_db
 from handlers.text_mode_handler import get_user_text_mode, set_user_text_mode 
 from handlers.chat_action_handler import get_user_chat_action, set_user_chat_action
-from utils import get_user_filters_from_db, save_user_filters_to_db
+from utils import get_user_filters_from_db, save_user_filters_to_db, db_execute
 
 CALC_STATE = {}
 
@@ -276,12 +276,17 @@ async def handle_panel_clicks(update, context):
         try:
             from config import supabase  
             clean_owner_id = int(owner_id)
-            response = supabase.table("users_diamonds").select("diamonds").eq("user_id", clean_owner_id).execute()
+            
+            # ایجاد کوئری
+            query = supabase.table("users_diamonds").select("diamonds").eq("user_id", clean_owner_id)
+            
+            # اجرای غیرهمزمان با تابع کمکی
+            response = await db_execute(query)
+            
             if response.data:
                 user_gold_balance = response.data[0].get("diamonds", 0)
         except Exception as db_error:
             print(f"⚠️ Error fetching diamonds from Supabase: {db_error}")
-        
         caption_text = (
             f" › **اطلاعات حساب کاربری**\n\n"
             f"› **نام:** {user_name}\n"
