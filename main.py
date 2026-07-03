@@ -20,6 +20,7 @@ from telegram.ext import (
 )
 from handlers.rps_game_handler import register_rps_handlers
 from config import BOT_TOKEN, PANEL_BOT_TOKEN , supabase
+from utils import db_execute  # اجرای غیرهمزمان کوئری‌های sync سوپابیس در thread pool
 
 from handlers.client_manager import load_existing_sessions
 from handlers.auth_handler import (
@@ -148,29 +149,50 @@ conv_handler = ConversationHandler(
 # لیست آیدی‌هایی که نباید کسر الماس شوند
 EXCLUDED_USER_IDS = [8004897709, 8668275780]
 
+# محدودیت تعداد کوئری‌های همزمان برای جلوگیری از غرق شدن thread pool
+_DEDUCT_JOB_CONCURRENCY = 20
+
+
+async def _deduct_single_user(uid: int, current_diamonds: int, semaphore: asyncio.Semaphore):
+    """کسر الماس یا غیرفعال‌سازی یک کاربر، با محدودیت همزمانی"""
+    async with semaphore:
+        try:
+            if current_diamonds >= 2:
+                new_balance = current_diamonds - 2
+                query = supabase.table("users_diamonds").update({"diamonds": new_balance}).eq("user_id", uid)
+            else:
+                query = supabase.table("users_diamonds").update({"is_active": False}).eq("user_id", uid)
+            await db_execute(query)
+        except Exception as e:
+            print(f"❌ خطا در کسر الماس کاربر {uid}: {e}")
+
+
 async def deduct_diamonds_job(context):
     """کسر ۲ الماس از کاربرانی که سلف‌بات آن‌ها فعال است"""
     try:
         # دریافت کاربران فعال (is_active = TRUE)
-        res = supabase.table("users_diamonds").select("user_id, diamonds").eq("is_active", True).execute()
-        
-        if res.data:
-            for user in res.data:
-                uid = user["user_id"]
-                
-                # بررسی آیدی‌های مستثنی شده
-                if uid in EXCLUDED_USER_IDS:
-                    continue
-                
-                current_diamonds = user["diamonds"]
-                
-                if current_diamonds >= 2:
-                    new_balance = current_diamonds - 2
-                    supabase.table("users_diamonds").update({"diamonds": new_balance}).eq("user_id", uid).execute()
-                else:
-                    # اگر الماس کافی نداشت، سلف‌باتش را خاموش کن
-                    supabase.table("users_diamonds").update({"is_active": False}).eq("user_id", uid).execute()
-                    
+        query = supabase.table("users_diamonds").select("user_id, diamonds").eq("is_active", True)
+        res = await db_execute(query)
+
+        if not res.data:
+            return
+
+        semaphore = asyncio.Semaphore(_DEDUCT_JOB_CONCURRENCY)
+        tasks = []
+
+        for user in res.data:
+            uid = user["user_id"]
+
+            # بررسی آیدی‌های مستثنی شده
+            if uid in EXCLUDED_USER_IDS:
+                continue
+
+            current_diamonds = user["diamonds"]
+            tasks.append(_deduct_single_user(uid, current_diamonds, semaphore))
+
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
     except Exception as e:
         print(f"❌ خطا در عملیات کسر الماس خودکار: {e}")
 
@@ -189,7 +211,6 @@ async def start_dual_bots():
     main_app.add_handler(conv_handler)
     main_app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r"^طلا"), handle_balance_request))
     main_app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r"^واریز طلا \d+$"), handle_transfer_request))
-    main_app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r"^(بازی)"), handle_game_request))
     register_rps_handlers(main_app)
     main_app.add_handler(CallbackQueryHandler(game_buttons_callback, pattern="^game_"))
     

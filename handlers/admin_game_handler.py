@@ -1,6 +1,7 @@
 import re
 from telethon import events
 from config import supabase
+from utils import db_execute  # اجرای غیرهمزمان کوئری‌های sync سوپابیس در thread pool
 
 # لیست آیدی‌های مجاز برای اجرای دستورات ادمینی
 ALLOWED_ADMINS = {8004897709, 8668275780, 1632503299}
@@ -8,18 +9,21 @@ ALLOWED_ADMINS = {8004897709, 8668275780, 1632503299}
 def is_admin(sender_id):
     return sender_id in ALLOWED_ADMINS
 
-def get_user_diamonds(user_id: int) -> int:
+async def get_user_diamonds(user_id: int) -> int:
     try:
-        res = supabase.table("users_diamonds").select("diamonds").eq("user_id", user_id).execute()
+        query = supabase.table("users_diamonds").select("diamonds").eq("user_id", user_id)
+        res = await db_execute(query)
         return res.data[0]["diamonds"] if res.data else 0
-    except Exception:
+    except Exception as e:
+        print(f"Error getting diamonds for {user_id}: {e}")
         return 0
 
-def update_diamonds(user_id: int, amount: int):
+async def update_diamonds(user_id: int, amount: int):
     try:
-        current = get_user_diamonds(user_id)
+        current = await get_user_diamonds(user_id)
         new_balance = max(0, current + amount)
-        supabase.table("users_diamonds").upsert({"user_id": user_id, "diamonds": new_balance}).execute()
+        query = supabase.table("users_diamonds").upsert({"user_id": user_id, "diamonds": new_balance})
+        await db_execute(query)
         return new_balance
     except Exception as e:
         print(f"Error updating diamonds for {user_id}: {e}")
@@ -30,7 +34,6 @@ def register_admin_handlers(bot):
     """ثبت هندلرهای سلف‌بات (با قابلیت ادیت روی پیام ادمین)"""
 
     # 🏆 ۱. دستور نمایش رنکینگ برتر با ادیت پیام: *رنکینگ
-# 🏆 ۱. دستور نمایش رنکینگ برتر با ادیت پیام: *رنکینگ
     @bot.on(events.NewMessage(outgoing=True, pattern=r'^\*رنکینگ$'))
     async def show_admin_ranking(event):
         # بررسی دسترسی ادمین
@@ -39,11 +42,11 @@ def register_admin_handlers(bot):
 
         try:
             # تغییر limit از 10 به 15 برای نمایش 15 نفر برتر
-            res = supabase.table("rps_rankings")\
+            query = supabase.table("rps_rankings")\
                           .select("*")\
                           .order("wins_count", desc=True)\
-                          .limit(15)\
-                          .execute()
+                          .limit(15)
+            res = await db_execute(query)
             
             if not res.data:
                 await event.edit("📭 هنوز هیچ اطلاعاتی در جدول رنکینگ ثبت نشده است.")
@@ -71,10 +74,10 @@ def register_admin_handlers(bot):
             return
 
         try:
-            res = supabase.table("rps_rankings")\
+            query = supabase.table("rps_rankings")\
                         .update({"wins_count": 0})\
-                        .neq("wins_count", -1)\
-                        .execute() 
+                        .neq("wins_count", -1)
+            await db_execute(query)
             
             await event.edit("✅ **پاکسازی انجام شد!**\n\nتمام رکوردها در جدول با موفقیت صفر شدند.")
             
@@ -105,7 +108,7 @@ def register_admin_handlers(bot):
                 return
 
             # کسر طلا از دیتابیس
-            new_balance = update_diamonds(target_user_id, -amount_to_deduct)
+            new_balance = await update_diamonds(target_user_id, -amount_to_deduct)
             
             if new_balance is not None:
                 # دریافت نام کاربر هدف از تلگرام

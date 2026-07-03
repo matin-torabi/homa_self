@@ -4,6 +4,7 @@ from telethon import events
 from telethon.tl.functions.messages import GetDiscussionMessageRequest
 from telethon.tl.types import Channel
 from config import supabase
+from utils import db_execute  # اجرای غیرهمزمان کوئری‌های sync سوپابیس در thread pool اختصاصی
 
 TABLE = "autocomment_settings"
 DEFAULT_COMMENT_TEXT = "اولین"
@@ -20,20 +21,15 @@ async def _get_my_id(client):
     return _my_id_cache[key]
 
 
-def _select_settings_sync(user_id: int):
-    res = supabase.table(TABLE).select("*").eq("user_id", user_id).limit(1).execute()
-    if res.data:
-        return res.data[0]
-    return None
-
-
-def _upsert_settings_sync(user_id: int, **fields):
-    payload = {"user_id": user_id, **fields}
-    supabase.table(TABLE).upsert(payload, on_conflict="user_id").execute()
-
-
 async def _get_user_settings(user_id: int):
-    row = await asyncio.to_thread(_select_settings_sync, user_id)
+    try:
+        query = supabase.table(TABLE).select("*").eq("user_id", user_id).limit(1)
+        res = await db_execute(query)
+        row = res.data[0] if res.data else None
+    except Exception as e:
+        print(f"Error fetching autocomment settings for {user_id}: {e}")
+        row = None
+
     if row is None:
         return {"enabled": False, "comment_text": DEFAULT_COMMENT_TEXT}
     return {
@@ -43,7 +39,12 @@ async def _get_user_settings(user_id: int):
 
 
 async def _update_user_settings(user_id: int, **updates):
-    await asyncio.to_thread(_upsert_settings_sync, user_id, **updates)
+    try:
+        payload = {"user_id": user_id, **updates}
+        query = supabase.table(TABLE).upsert(payload, on_conflict="user_id")
+        await db_execute(query)
+    except Exception as e:
+        print(f"Error updating autocomment settings for {user_id}: {e}")
 
 
 def register_autocomment_handler(client):

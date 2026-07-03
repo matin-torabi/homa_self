@@ -3,6 +3,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CallbackQueryHandler, MessageHandler, filters
 from telegram.error import BadRequest
 from config import supabase
+from utils import db_execute  # اجرای غیرهمزمان کوئری‌های sync سوپابیس در thread pool
 
 ACTIVE_RPS_GAMES = {}
 CHOICE_EMOJIS = {"rock": "✊ سنگ", "paper": "✋ کاغذ", "scissors": "✌️ قیچی"}
@@ -15,30 +16,43 @@ def get_mention(user) -> str:
     full_name = f"{user.first_name or ''} {user.last_name or ''}".strip()
     return full_name if full_name else f"کاربر {user.id}"
 
-def get_user_diamonds(user_id: int) -> int:
+
+async def get_user_diamonds(user_id: int) -> int:
     try:
-        res = supabase.table("users_diamonds").select("diamonds").eq("user_id", user_id).execute()
+        query = supabase.table("users_diamonds").select("diamonds").eq("user_id", user_id)
+        res = await db_execute(query)
         return res.data[0]["diamonds"] if res.data else 0
-    except Exception:
+    except Exception as e:
+        print(f"Error getting diamonds for {user_id}: {e}")
         return 0
 
-def update_diamonds(user_id: int, amount: int):
+
+async def update_diamonds(user_id: int, amount: int):
     try:
-        current = get_user_diamonds(user_id)
+        current = await get_user_diamonds(user_id)
         new_balance = max(0, current + amount)
-        supabase.table("users_diamonds").upsert({"user_id": user_id, "diamonds": new_balance}).execute()
+        query = supabase.table("users_diamonds").upsert({"user_id": user_id, "diamonds": new_balance})
+        await db_execute(query)
     except Exception as e:
         print(f"Error updating diamonds for {user_id}: {e}")
 
-def add_win_to_ranking(user_id: int, display_name: str):
+
+async def add_win_to_ranking(user_id: int, display_name: str):
     """ذخیره برد به همراه زیباترین نام در دسترس کاربر"""
     try:
-        res = supabase.table("rps_rankings").select("wins_count").eq("user_id", user_id).execute()
+        query = supabase.table("rps_rankings").select("wins_count").eq("user_id", user_id)
+        res = await db_execute(query)
         if res.data:
             new_wins = res.data[0]["wins_count"] + 1
-            supabase.table("rps_rankings").update({"wins_count": new_wins, "username": display_name}).eq("user_id", user_id).execute()
+            query = supabase.table("rps_rankings").update(
+                {"wins_count": new_wins, "username": display_name}
+            ).eq("user_id", user_id)
+            await db_execute(query)
         else:
-            supabase.table("rps_rankings").insert({"user_id": user_id, "username": display_name, "wins_count": 1}).execute()
+            query = supabase.table("rps_rankings").insert(
+                {"user_id": user_id, "username": display_name, "wins_count": 1}
+            )
+            await db_execute(query)
     except Exception as e:
         print(f"Error updating ranking for {user_id}: {e}")
 
@@ -66,7 +80,7 @@ async def start_rps_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # بررسی موجودی طلا سازنده برای شرکت در بازی
-    creator_diamonds = get_user_diamonds(creator_id)
+    creator_diamonds = await get_user_diamonds(creator_id)
     if creator_diamonds < 30:
         await message.reply_text("❌ برای شرکت در بازی‌ها باید حداقل ۳۰ طلا داشته باشید!")
         return
@@ -154,7 +168,7 @@ async def handle_rps_clicks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await safe_answer("⚠️ این بازی قبلاً شروع شده است!", show_alert=True)
             return
 
-        opp_diamonds = get_user_diamonds(clicker_id)
+        opp_diamonds = await get_user_diamonds(clicker_id)
         if opp_diamonds < 30:
             await safe_answer("❌ شما برای بازی باید حداقل ۳۰ طلا داشته باشید!", show_alert=True)
             return
@@ -206,7 +220,8 @@ async def handle_rps_clicks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def show_rps_ranking(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        res = supabase.table("rps_rankings").select("*").order("wins_count", descending=True).limit(10).execute()
+        query = supabase.table("rps_rankings").select("*").order("wins_count", desc=True).limit(10)
+        res = await db_execute(query)
         if not res.data:
             await update.message.reply_text("📭 هنوز بردی در سیستم ثبت نشده است.")
             return
@@ -276,9 +291,9 @@ async def process_game_result(query, game_id, game):
         winner = "opponent"
 
     if winner == "creator":
-        update_diamonds(game["creator_id"], +bet)
-        update_diamonds(game["opponent_id"], -bet)
-        add_win_to_ranking(game["creator_id"], game["creator_name"])
+        await update_diamonds(game["creator_id"], +bet)
+        await update_diamonds(game["opponent_id"], -bet)
+        await add_win_to_ranking(game["creator_id"], game["creator_name"])
 
         final_text = (
             "🎉 <b>بازی به پایان رسید!</b> 🎉\n\n"
@@ -287,9 +302,9 @@ async def process_game_result(query, game_id, game):
             f"💰 مقدار <code>{bet}</code> طلا به حساب برنده واریز شد!\n"
         )
     else:
-        update_diamonds(game["opponent_id"], +bet)
-        update_diamonds(game["creator_id"], -bet)
-        add_win_to_ranking(game["opponent_id"], game["opponent_name"])
+        await update_diamonds(game["opponent_id"], +bet)
+        await update_diamonds(game["creator_id"], -bet)
+        await add_win_to_ranking(game["opponent_id"], game["opponent_name"])
 
         final_text = (
             "🎉 <b>بازی به پایان رسید!</b> 🎉\n\n"
