@@ -22,7 +22,7 @@ def register_word_filter(bot):
                 print(f" خطا در دریافت اطلاعات کلاینت در بخش فیلتر: {e}")
                 return
 
-        res = get_user_filters_from_db(client.my_own_id)
+        res = await get_user_filters_from_db(client.my_own_id)
         if res is not None:
             client.filter_config = res
         else:
@@ -120,7 +120,7 @@ def register_word_filter(bot):
         if event.sender_id != bot.my_own_id: return
 
         # همگام‌سازی کش جهت دقت خروجی
-        bot.filter_config = get_user_filters_from_db(bot.my_own_id)
+        bot.filter_config = await get_user_filters_from_db(bot.my_own_id)
         config = bot.filter_config
 
         words = config.get("words", [])
