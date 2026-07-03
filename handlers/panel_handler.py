@@ -7,6 +7,7 @@ from utils import get_user_locks_from_db, save_user_lock_to_db
 from handlers.text_mode_handler import get_user_text_mode, set_user_text_mode 
 from handlers.chat_action_handler import get_user_chat_action, set_user_chat_action
 from utils import get_user_filters_from_db, save_user_filters_to_db, db_execute
+from utils import get_chat_guard_from_db, save_chat_guard_to_db
 
 CALC_STATE = {}
 
@@ -559,8 +560,7 @@ async def handle_panel_clicks(update, context):
         owner_id = int(data.split("_")[2])
         
         # خواندن وضعیت فعلی از سوپابیس
-        from utils import get_chat_guard_from_db
-        config = get_chat_guard_from_db(owner_id)
+        config = await get_chat_guard_from_db(owner_id)
         if not config:
             config = {"user_id": owner_id, "save_deleted": True, "save_edited": True, "save_ttl": True}
         
@@ -581,8 +581,7 @@ async def handle_panel_clicks(update, context):
         field_type = parts[2]   
         owner_id = int(parts[3])
         
-        from utils import get_chat_guard_from_db, save_chat_guard_to_db
-        config = get_chat_guard_from_db(owner_id)
+        config = await get_chat_guard_from_db(owner_id)
         if not config:
             config = {"user_id": owner_id, "save_deleted": True, "save_edited": True, "save_ttl": True}
         
@@ -602,7 +601,7 @@ async def handle_panel_clicks(update, context):
         new_status = not config.get(target_field, False)
         config[target_field] = new_status
         
-        save_chat_guard_to_db(owner_id, config)
+        await save_chat_guard_to_db(owner_id, config)
         
         clients_dict = context.bot_data.get("clients", {})
         client_bot = clients_dict.get(owner_id) or clients_dict.get(str(owner_id))

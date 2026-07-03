@@ -212,6 +212,7 @@ import os
 import asyncio
 from datetime import datetime
 from telethon import events, types
+from utils import get_chat_guard_from_db
 
 # هاب مرکزی کلاینت‌ها برای جلوگیری از تداخل حافظه در مولتی‌کلاینت
 GLOBAL_CLIENTS = {}
@@ -227,8 +228,7 @@ def register_chat_guard(bot):
             
             my_id = client_bot._cached_my_id
             
-            # خواندن مستقیم آخرین وضعیت از دیتابیس برای هماهنگی با دکمه‌های شیشه‌ای پنل
-            from utils import get_chat_guard_from_db
+
             cfg = await get_chat_guard_from_db(my_id)
             if not cfg:
                 cfg = {"save_deleted": True, "save_edited": True, "save_ttl": True}
