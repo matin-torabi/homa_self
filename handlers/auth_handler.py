@@ -1,7 +1,5 @@
 import asyncio
 import os
-from functools import partial
-from cachetools import TTLCache
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -41,68 +39,19 @@ MAIN_MENU, START_PAYMENT, PHONE, CODE, PASSWORD, ENTER_INVITE_CODE = range(6)
 # 🟢 دیکشنری برای نگه‌داشتن رفرنس تسک‌های پس‌زمینه جهت جلوگیری از کرش سلف‌بات‌ها
 running_tasks = {}
 
-async def perform_async_login(user_id, query, context):
-    """
-    این تابع عملیات سنگین اتصال کلاینت را در پس‌زمینه انجام می‌دهد
-    تا Event Loop اصلی ربات برای ۸۰۰۰ کاربر دیگر بلاک نشود.
-    """
-    try:
-        session_file = f"new_sessions/{user_id}.session"
-        if not os.path.exists(session_file):
-            await query.edit_message_text("❌ فایل سشن یافت نشد.")
-            return
-
-        # ایجاد و اتصال کلاینت
-        client = create_client(user_id)
-        await client.connect()
-
-        if await client.is_user_authorized():
-            clients[user_id] = client
-            register_handlers(client)
-            start_client_background(user_id, client)
-            
-            # آپدیت دیتابیس به صورت غیرهمگام
-            await run_db(lambda: supabase.table("users_diamonds").update({"is_active": True}).eq("user_id", user_id).execute())
-            
-            await query.edit_message_text("🟢 سلف‌بات با موفقیت روشن و فعال شد!")
-        else:
-            await query.edit_message_text("⚠️ سشن شما منقضی شده است. دوباره لاگین کنید.")
-            
-    except Exception as e:
-        await query.edit_message_text(f"❌ خطای سیستم در اتصال: {str(e)}")
-
-async def run_db(func, *args, **kwargs):
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, partial(func, *args, **kwargs))
-
 async def monitor_client(user_id: int, client):
-    """تابع ناظر بهینه شده با استفاده از Executor برای عدم بلاک شدن ربات"""
+    """تابع ناظر برای بررسی وضعیت کلاینت؛ در صورت دیسکانکت شدن، وضعیت دیتابیس را آپدیت می‌کند"""
     try:
-        # اجرای کلاینت
         await client.run_until_disconnected()
     except Exception as e:
-        print(f"S_bot {user_id} disconnected with error: {e}")
+        print(f" s_bot {user_id} disconnected: {e}")
     finally:
-        # استفاده از run_db برای اینکه دیتابیس ربات رو کند نکنه
         try:
-            await run_db(
-                supabase.table("users_diamonds")
-                .update({"is_active": False})
-                .eq("user_id", user_id)
-                .execute
-            )
-        except Exception as db_err:
-            print(f"Error updating DB for {user_id}: {db_err}")
-        
-        # پاکسازی حافظه
+            supabase.table("users_diamonds").update({"is_active": False}).eq("user_id", user_id).execute()
+        except:
+            pass
         if user_id in clients:
-            try:
-                # اطمینان از بسته شدن کامل کلاینت
-                await clients[user_id].disconnect()
-            except:
-                pass
             del clients[user_id]
-            
         if user_id in running_tasks:
             del running_tasks[user_id]
 
@@ -112,38 +61,25 @@ def start_client_background(user_id: int, client):
     running_tasks[user_id] = task
 
 
-sub_cache = TTLCache(maxsize=10000, ttl=1800)
-
 async def check_sub(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    # چک کردن کش
-    if user_id in sub_cache:
-        return sub_cache[user_id]
-    
     try:
-        # اگر در کش نبود، از تلگرام بپرس
         channel_member = await context.bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
         if channel_member.status in ["left", "kicked"]:
-            sub_cache[user_id] = False
             return False
-            
         group_member = await context.bot.get_chat_member(chat_id=GROUP_ID, user_id=user_id)
         if group_member.status in ["left", "kicked"]:
-            sub_cache[user_id] = False
             return False
-        
-        # ثبت در کش
-        sub_cache[user_id] = True
         return True
     except Exception:
-        # اگر خطایی رخ داد (مثلاً کاربر پیدا نشد یا ربات دسترسی نداشت)، فرض رو بر عضویت بگذار
         return True
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if update.effective_chat.type != 'private':
-        return
 
-    # منطق دعوت دوستان (بهینه‌تر)
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.type != "private":
+        return ConversationHandler.END
+
+    user_id = update.effective_user.id
+
     if context.args and context.args[0].startswith("inv_"):
         try:
             inviter_id = int(context.args[0].split("_")[1])
@@ -152,8 +88,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except ValueError:
             pass
 
-    # چک کردن عضویت (حالا از کش استفاده می‌کند که خیلی سریع‌تر است)
-    if not await check_sub(user_id, context):
+    is_subscribed = await check_sub(user_id, context)
+    if not is_subscribed:
         msg_text = "⚠️ برای استفاده از ربات، ابتدا باید در کانال و گروه ما عضو شوید:"
         if update.message:
             await update.message.reply_text(msg_text, reply_markup=get_join_keyboard())
@@ -162,29 +98,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.callback_query.message.reply_text(msg_text, reply_markup=get_join_keyboard())
         return MAIN_MENU
 
-    # استفاده از run_db برای عدم مسدود شدن ربات
-    # استفاده از یک کوئری ترکیبی برای کاهش دفعات رفت و آمد به دیتابیس
-    user_row = await run_db(
-        lambda: supabase.table("users_diamonds")
-        .select("referred_by, is_active")
-        .eq("user_id", user_id)
-        .execute()
-    )
-    
-    data = user_row.data[0] if user_row.data else {}
-    referred_by = data.get("referred_by")
-    is_active_db = data.get("is_active", False)
-    
     session_exists = os.path.exists(f"new_sessions/{user_id}.session")
 
-    # ساخت کیبورد (بهینه‌سازی شده)
-    keyboard = [[InlineKeyboardButton("⚙️ مدیریت و فعال‌سازی سلف‌بات", callback_data="menu_activation")]]
-    
-    if not referred_by:
-        keyboard.append([InlineKeyboardButton("🎁 وارد کردن کد دعوت دوستان", callback_data="enter_invite_menu")])
+    keyboard = [
+        [InlineKeyboardButton("⚙️ مدیریت و فعال‌سازی سلف‌بات", callback_data="menu_activation")]
+    ]
+
+    try:
+        user_row = supabase.table("users_diamonds").select("referred_by").eq("user_id", user_id).execute()
+        if not user_row.data or user_row.data[0].get("referred_by") is None:
+            keyboard.append([InlineKeyboardButton("🎁 وارد کردن کد دعوت دوستان", callback_data="enter_invite_menu")])
+    except:
+        pass
 
     keyboard.extend([
-        [InlineKeyboardButton("👥 گروه", url=GROUP_URL), InlineKeyboardButton("📢 چنل", url=CHANNEL_URL)],
+        [
+            InlineKeyboardButton("👥 گروه", url=GROUP_URL),
+            InlineKeyboardButton("📢 چنل", url=CHANNEL_URL),
+        ],
         [InlineKeyboardButton("💰 شارژ موجودی (طلا)", callback_data="charge_gold_menu")],
         [InlineKeyboardButton("☎️ پشتیبانی", url=SUPPORT_URL)],
         [InlineKeyboardButton("🤝 دعوت از دوستان (۳۵ الماس هدیه)", callback_data="menu_referral")],
@@ -192,46 +123,55 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🔒 بستن پنل مدیریت", callback_data="close_panel")]
     ])
 
-    welcome_text = "👋 به ربات مدیریت هوما سلف‌بات خوش آمدید!\n\n"
-    if session_exists:
-        status_text = "🟢 روشن" if is_active_db else "🔴 خاموش"
-        welcome_text += f"📊 وضعیت سلف‌بات شما: **{status_text}**\n\n"
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    welcome_text = "👋 به ربات مدیریت هوما سلف‌بات خوش آمدید!\nلطفاً از منوی زیر گزینه مورد نظر خود را انتخاب کنید:\n\n"
     
-    welcome_text += "لطفاً از منوی زیر گزینه مورد نظر خود را انتخاب کنید:"
+    if session_exists:
+        try:
+            db_status = supabase.table("users_diamonds").select("is_active").eq("user_id", user_id).execute()
+            is_active_db = db_status.data[0].get("is_active", False) if db_status.data else False
+        except:
+            is_active_db = False
+        status_text = "🟢 روشن" if is_active_db else "🔴 خاموش"
+        welcome_text += f"📊 وضعیت سلف‌بات شما: **{status_text}**"
 
-    # ارسال پاسخ
     if update.message:
-        await update.message.reply_text(welcome_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+        await update.message.reply_text(welcome_text, reply_markup=reply_markup)
         await update.message.reply_text("🎛 منو بارگذاری شد.", reply_markup=get_start_keyboard())
     elif update.callback_query:
-        await update.callback_query.edit_message_text(welcome_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+        await update.callback_query.edit_message_text(welcome_text, reply_markup=reply_markup)
 
     return MAIN_MENU
 
 async def handle_main_menu_clicks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
+
     user_id = query.from_user.id
     data = query.data
 
     if data == "check_membership":
-            if await check_sub(user_id, context):
-                return await start(update, context)
-            await query.edit_message_text("❌ عضو نیستید! لطفاً ابتدا عضو شوید.", reply_markup=get_join_keyboard())
+        is_subscribed = await check_sub(user_id, context)
+        if is_subscribed:
+            return await start(update, context)
+        else:
+            await query.edit_message_text("❌ شما هنوز در کانال یا گروه عضو نشده‌اید! لطفاً ابتدا عضو شوید 👇", reply_markup=get_join_keyboard())
             return MAIN_MENU
 
     if not await check_sub(user_id, context):
-        await query.edit_message_text("⚠️ اشتراک شما قطع شده است.", reply_markup=get_join_keyboard())
+        await query.edit_message_text("⚠️ اشتراک شما قطع شده است. لطفا ابتدا عضو شوید:", reply_markup=get_join_keyboard())
         return MAIN_MENU
 
     # ⚙️ هاب مدیریت و فعال‌سازی سلف‌بات
     if data == "menu_activation":
         session_exists = os.path.exists(f"new_sessions/{user_id}.session")
         
-        # کوئری بهینه دیتابیس
-        db_res = await run_db(lambda: supabase.table("users_diamonds").select("is_active").eq("user_id", user_id).execute())
-        is_active_db = db_res.data[0].get("is_active", False) if db_res.data else False
-
+        try:
+            db_status = supabase.table("users_diamonds").select("is_active").eq("user_id", user_id).execute()
+            is_active_db = db_status.data[0].get("is_active", False) if db_status.data else False
+        except:
+            is_active_db = False
+        
         keyboard = []
         if session_exists:
             status_buttons = []
@@ -297,7 +237,7 @@ async def handle_main_menu_clicks(update: Update, context: ContextTypes.DEFAULT_
         pending_code = context.user_data.get("pending_invite_code")
         if pending_code:
             try:
-                await run_db(lambda: supabase.table("users_diamonds").update({"referred_by": pending_code}).eq("user_id", user_id).execute())
+                supabase.table("users_diamonds").update({"referred_by": pending_code}).eq("user_id", user_id).execute()
                 await query.edit_message_text("✅ کد معرف با موفقیت ثبت شد! پس از خرید و فعال‌سازی سلف‌بات توسط شما، هدیه ۳۵ الماس به معرف تعلق خواهد گرفت.")
                 context.user_data.pop("pending_invite_code", None)
             except Exception as e:
@@ -314,7 +254,7 @@ async def handle_main_menu_clicks(update: Update, context: ContextTypes.DEFAULT_
         return ENTER_INVITE_CODE
 
 
-    # ---------------------------------------------------------
+# ---------------------------------------------------------
     # ۱. منوی باز کردن اولیه ماشین حساب خرید طلا
     # ---------------------------------------------------------
     elif data == "charge_gold_menu" or data == "cancel_to_menu":
@@ -438,35 +378,73 @@ async def handle_main_menu_clicks(update: Update, context: ContextTypes.DEFAULT_
             pass
         return MAIN_MENU
 
-
-    elif data in ["self_stop", "self_start", "self_delete"]:
-        await query.edit_message_text("⏳ در حال پردازش دستور...")
-        
-        if data == "self_stop":
-            await run_db(lambda: supabase.table("users_diamonds").update({"is_active": False}).eq("user_id", user_id).execute())
-            # پاکسازی کلاینت
+    # ⏸ خاموش کردن منطقی سلف‌بات
+    elif data == "self_stop":
+        try:
+            supabase.table("users_diamonds").update({"is_active": False}).eq("user_id", user_id).execute()
             if user_id in clients:
-                try: await clients[user_id].disconnect() 
-                except: pass
+                await clients[user_id].disconnect()
                 del clients[user_id]
             if user_id in running_tasks:
                 running_tasks[user_id].cancel()
                 del running_tasks[user_id]
-            await query.answer("🔴 سلف‌بات خاموش شد.", show_alert=True)
+            await query.answer("🔴 سلف‌بات شما خاموش شد.", show_alert=True)
+        except Exception as e:
+            await query.answer(f"خطا در خاموش کردن: {e}", show_alert=True)
+        return await start(update, context)
 
-        elif data == "self_start":
-            # اجرای لاگین در یک تسک مجزا برای جلوگیری از فریز شدن ربات
-            asyncio.create_task(perform_async_login(user_id, query, context))
-            return MAIN_MENU
+    # ▶️ روشن کردن منطقی و آنی سلف‌بات
+    elif data == "self_start":
+        session_file = f"new_sessions/{user_id}.session"
+        if not os.path.exists(session_file):
+            await query.answer("❌ فایل سشن یافت نشد. ابتدا لاگین کنید.", show_alert=True)
+            return await start(update, context)
             
-        elif data == "self_delete":
-            # پاکسازی کامل
-            await run_db(lambda: supabase.table("users_diamonds").update({"is_active": False}).eq("user_id", user_id).execute())
-            # ... حذف فایل و کلاینت (مانند self_stop)
-            session_file = f"new_sessions/{user_id}.session"
-            if os.path.exists(session_file): os.remove(session_file)
-            await query.answer("🗑 سلف‌بات حذف شد.", show_alert=True)
+        try:
+            await query.edit_message_text("⏳ در حال راه‌اندازی و اتصال به کلاینت تلگرام...")
+            
+            if user_id in clients:
+                try: await clients[user_id].disconnect()
+                except: pass
+                del clients[user_id]
+            
+            client = create_client(user_id)
+            await client.connect()
+            
+            if await client.is_user_authorized():
+                clients[user_id] = client
+                register_handlers(client)
+                start_client_background(user_id, client)
+                
+                try: supabase.table("users_diamonds").update({"is_active": True}).eq("user_id", user_id).execute()
+                except Exception as db_err: print(f"Database error: {db_err}")
+                
+                await query.answer("🟢 سلف‌بات با موفقیت روشن و فعال شد!", show_alert=True)
+            else:
+                await query.answer("⚠️ سشن شما منقضی شده است.", show_alert=True)
+        except Exception as e:
+            await query.answer(f"❌ خطای سیستم: {str(e)}", show_alert=True)
+            
+        return await start(update, context)
 
+    # 🗑 حذف کامل سلف‌بات
+    elif data == "self_delete":
+        try:
+            supabase.table("users_diamonds").update({"is_active": False}).eq("user_id", user_id).execute()
+            if user_id in clients:
+                await clients[user_id].disconnect()
+                del clients[user_id]
+            if user_id in running_tasks:
+                running_tasks[user_id].cancel()
+                del running_tasks[user_id]
+        except:
+            pass
+        session_file = f"new_sessions/{user_id}.session"
+        if os.path.exists(session_file):
+            os.remove(session_file)
+            await query.answer("🗑 سلف‌بات کاملاً حذف گردید.", show_alert=True)
+        else:
+            await query.answer("فایلی برای حذف پیدا نشد.", show_alert=True)
         return await start(update, context)
 
     elif data == "back_to_main":
@@ -494,32 +472,15 @@ async def process_invite_code_input(update: Update, context: ContextTypes.DEFAUL
         return MAIN_MENU
 
     try:
-        # اجرای عملیات‌های دیتابیس در ترد جداگانه
-        # استفاده از یک Lambda برای ارسال به run_db
-        inviter_check = await run_db(
-            lambda: supabase.table("users_diamonds").select("user_id").eq("user_id", inviter_id).execute()
-        )
-        
+        inviter_check = supabase.table("users_diamonds").select("user_id").eq("user_id", inviter_id).execute()
         if not inviter_check.data:
             await update.message.reply_text("❌ چنین کد دعوتی در سیستم ثبت نشده است!")
             return MAIN_MENU
 
-        # آپدیت وضعیت در دیتابیس
-        await run_db(
-            lambda: supabase.table("users_diamonds")
-            .update({"referred_by": inviter_id, "invite_reward_paid": False})
-            .eq("user_id", user_id)
-            .execute()
-        )
-        
-        await update.message.reply_text(
-            "✅ کد معرف شما با موفقیت ثبت شد.\n🎁 پس از اینکه سلف‌بات خود را با طلا فعال کنید، جایزه ۳۵ الماس به معرف شما تعلق می‌گیرد.", 
-            reply_markup=get_start_keyboard()
-        )
+        supabase.table("users_diamonds").update({"referred_by": inviter_id, "invite_reward_paid": False}).eq("user_id", user_id).execute()
+        await update.message.reply_text("✅ کد معرف شما با موفقیت ثبت شد.\n🎁 پس از اینکه سلف‌بات خود را با طلا فعال کنید، جایزه ۳۵ الماس به معرف شما تعلق می‌گیرد.", reply_markup=get_start_keyboard())
     except Exception as e:
-        # لاگ کردن خطا به جای نمایش مستقیم به کاربر (امن‌تر است)
-        print(f"Database error in process_invite_code_input: {e}")
-        await update.message.reply_text("⚠️ خطایی در ارتباط با سرور رخ داد. لطفاً دوباره تلاش کنید.")
+        await update.message.reply_text(f"⚠️ خطا در ارتباط با دیتابیس: {e}")
 
     return MAIN_MENU
 
@@ -544,6 +505,7 @@ async def handle_go_to_pay(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_main")]]
     await query.edit_message_text(receipt_text, reply_markup=InlineKeyboardMarkup(keyboard))
 
+
 async def handle_activation_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
@@ -553,8 +515,7 @@ async def handle_activation_payment(update: Update, context: ContextTypes.DEFAUL
         await query.message.reply_text("⚠️ برای ادامه باید عضو کانال و گروه باشید:", reply_markup=get_join_keyboard())
         return MAIN_MENU
 
-    # ۱. استفاده از run_db برای گرفتن موجودی (برای جلوگیری از فریز شدن ربات)
-    user_balance = await run_db(lambda: get_balance(user_id))
+    user_balance = get_balance(user_id)
     REQUIRED_GOLD = 30
 
     if user_balance < REQUIRED_GOLD:
@@ -566,14 +527,30 @@ async def handle_activation_payment(update: Update, context: ContextTypes.DEFAUL
         )
         return MAIN_MENU
 
-    # ۲. کسر موجودی و انجام عملیات‌های دیتابیسی در پس‌زمینه
-    await run_db(lambda: update_balance(user_id, -REQUIRED_GOLD))
+    update_balance(user_id, -REQUIRED_GOLD)
     
-    # ۳. منطق پرداخت هدیه به معرف (به صورت غیرهمگام)
-    asyncio.create_task(process_referral_reward(user_id, context))
+    try:
+        user_data_db = supabase.table("users_diamonds").select("referred_by", "invite_reward_paid").eq("user_id", user_id).execute()
+        if user_data_db.data:
+            inviter_id = user_data_db.data[0].get("referred_by")
+            reward_paid = user_data_db.data[0].get("invite_reward_paid", False)
+            
+            if inviter_id and not reward_paid:
+                inviter_bal = get_balance(inviter_id)
+                supabase.table("users_diamonds").update({"diamonds": inviter_bal + 35}).eq("user_id", inviter_id).execute()
+                supabase.table("users_diamonds").update({"invite_reward_paid": True}).eq("user_id", user_id).execute()
+                
+                try:
+                    await context.bot.send_message(chat_id=inviter_id, text=f"🎉 یکی از زیرمجموعه‌های شما سلف‌بات خود را فعال کرد! ۳۵ الماس هدیه به حساب شما واریز شد.💎")
+                except:
+                    pass
+    except Exception as e:
+        print(f"Error in referral payout: {e}")
 
-    # ۴. فعال‌سازی نهایی
-    await run_db(lambda: supabase.table("users_diamonds").update({"is_active": True}).eq("user_id", user_id).execute())
+    try:
+        supabase.table("users_diamonds").update({"is_active": True}).eq("user_id", user_id).execute()
+    except:
+        pass
 
     contact_button = KeyboardButton(text="📱 ارسال شماره تلفن", request_contact=True)
     phone_keyboard = ReplyKeyboardMarkup([[contact_button]], resize_keyboard=True, one_time_keyboard=True)
@@ -581,33 +558,12 @@ async def handle_activation_payment(update: Update, context: ContextTypes.DEFAUL
     await query.edit_message_text("✅ پرداخت تایید شد. در حال انتقال به مرحله بعد...")
     await query.message.reply_text(
         f"✅ **پرداخت با موفقیت انجام شد!**\n💰 مبلغ {REQUIRED_GOLD} طلا از حساب شما کسر شد.\n"
+        f"🔹 موجودی جدید: {get_balance(user_id)} طلا\n\n"
         f"👇 برای تکمیل لاگین، روی دکمه بزرگ زیر صفحه بزنید تا شماره تلفنتان ارسال شود:",
         reply_markup=phone_keyboard,
     )
     return PHONE
 
-async def process_referral_reward(user_id, context):
-    """تابع کمکی برای واریز هدیه به معرف بدون مسدود کردن ترد اصلی"""
-    try:
-        user_data = await run_db(lambda: supabase.table("users_diamonds")
-            .select("referred_by", "invite_reward_paid")
-            .eq("user_id", user_id).execute())
-            
-        if user_data.data:
-            inviter_id = user_data.data[0].get("referred_by")
-            reward_paid = user_data.data[0].get("invite_reward_paid", False)
-            
-            if inviter_id and not reward_paid:
-                inviter_bal = await run_db(lambda: get_balance(inviter_id))
-                await run_db(lambda: supabase.table("users_diamonds").update({"diamonds": inviter_bal + 35}).eq("user_id", inviter_id).execute())
-                await run_db(lambda: supabase.table("users_diamonds").update({"invite_reward_paid": True}).eq("user_id", user_id).execute())
-                
-                try:
-                    await context.bot.send_message(chat_id=inviter_id, text=f"🎉 یکی از زیرمجموعه‌های شما سلف‌بات خود را فعال کرد! ۳۵ الماس هدیه به حساب شما واریز شد.💎")
-                except:
-                    pass
-    except Exception as e:
-        print(f"Error in background referral payout: {e}")
 
 async def handle_cancel_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return await start(update, context)
@@ -618,59 +574,53 @@ async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ لطفاً شماره خود را فقط با استفاده از دکمه «📱 ارسال شماره تلفن» ارسال کنید.")
         return PHONE
 
+    contact = update.message.contact
     user_id = update.effective_user.id
-    phone = update.message.contact.phone_number
+    phone = contact.phone_number
+
     if not phone.startswith("+"):
         phone = "+" + phone
 
-    # نمایش پیام وضعیت به کاربر
-    status_msg = await update.message.reply_text("⏳ در حال برقراری ارتباط با تلگرام و ارسال کد...")
+    if user_id in login_data:
+        del login_data[user_id]
 
-    # انتقال منطق سنگین به یک تابع Async جداگانه
-    asyncio.create_task(perform_async_phone_auth(user_id, phone, status_msg, context))
-    
-    return CODE
+    if user_id in clients:
+        try:
+            await clients[user_id].disconnect()
+        except:
+            pass
 
-async def perform_async_phone_auth(user_id, phone, status_msg, context):
-    """
-    اجرای عملیات سنگینِ اتصال به تلگرام در پس‌زمینه
-    """
+    client = create_client(user_id)
+    await client.connect()
+
     try:
-        # پاکسازی قبلی‌ها
-        if user_id in login_data: del login_data[user_id]
-        if user_id in clients:
-            try: await clients[user_id].disconnect()
-            except: pass
-            del clients[user_id]
-
-        client = create_client(user_id)
-        await client.connect()
-
-        # درخواست کد از تلگرام
         sent_code = await client.send_code_request(phone)
-        
         clients[user_id] = client
         login_data[user_id] = {
             "phone": phone,
             "phone_code_hash": sent_code.phone_code_hash,
             "used": False,
         }
-        
-        await status_msg.edit_text(
-            "🔢 **کد فعال‌سازی تلگرام ارسال شد.**\n\nلطفاً کد دریافتی را وارد کنید:",
-            reply_markup=get_code_keyboard("")
+        context.user_data["telegram_code"] = ""
+        await update.message.reply_text(
+            "🔢 **کد فعال‌سازی تلگرام ارسال شد.**\n\nلطفاً با استفاده از دکمه‌های شیشه‌ای زیر، کد دریافتی را وارد کنید:\n✍️ کد وارد شده: ",
+            reply_markup=get_code_keyboard(""),
         )
+        return CODE
     except Exception as e:
-        await status_msg.edit_text(f"❌ خطا در ارسال کد:\n{e}")
-        # در صورت خطا، ConversationHandler را ببندید
-        # (نکته: در اینجا به دلیل استفاده از task، ممکن است نیاز باشد کاربر را به منوی اصلی هدایت کنید)
+        await update.message.reply_text(
+            f"❌ خطا در ارسال کد:\n{e}\n\nبرگشت به منوی اصلی...",
+            reply_markup=get_start_keyboard(),
+        )
+        return ConversationHandler.END
+
+
 async def handle_code_calculator_clicks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     data = query.data
     user_id = query.from_user.id
     current_code = context.user_data.get("telegram_code", "")
 
-    # مدیریت دکمه‌های ماشین‌حساب (سریع و سبک)
     if data == "code_back":
         return await start(update, context)
 
@@ -686,98 +636,87 @@ async def handle_code_calculator_clicks(update: Update, context: ContextTypes.DE
     context.user_data["telegram_code"] = current_code
 
     if data != "code_submit":
-        await query.edit_message_text(
-            f"🔢 **کد فعال‌سازی تلگرام ارسال شد.**\n\n✍️ کد وارد شده: `{current_code}`",
-            reply_markup=get_code_keyboard(current_code),
-        )
+        try:
+            await query.edit_message_text(
+                "🔢 **کد فعال‌سازی تلگرام ارسال شد.**\n\nلطفاً با استفاده از دکمه‌های شیشه‌ای زیر، کد دریافتی را وارد کنید:\n"
+                f"✍️ کد وارد شده: `{current_code}`",
+                reply_markup=get_code_keyboard(current_code),
+            )
+        except Exception:
+            pass
         await query.answer()
         return CODE
 
-    # منطق سابمیت کد (بخش سنگین)
-    if len(current_code) < 5:
-        await query.answer("⚠️ کد تلگرام حداقل باید ۵ رقم باشد!", show_alert=True)
-        return CODE
+    if data == "code_submit":
+        if len(current_code) < 5:
+            await query.answer("⚠️ کد تلگرام حداقل باید ۵ رقم باشد!", show_alert=True)
+            return CODE
 
-    if user_id not in login_data:
-        await query.message.reply_text("❌ جلسه شما یافت نشد. مجدد /start بزنید.")
-        return ConversationHandler.END
+        if user_id not in login_data:
+            await query.message.reply_text("❌ جلسه شما یافت نشد. لطفاً دوباره /start بزنید.", reply_markup=get_start_keyboard())
+            return ConversationHandler.END
 
-    await query.edit_message_text("⏳ در حال تایید کد و اتصال به تلگرام...")
-    
-    # انتقال عملیات احراز هویت به یک تسک پس‌زمینه
-    asyncio.create_task(perform_async_sign_in(user_id, current_code, query, context))
-    return ConversationHandler.END
-
-async def perform_async_sign_in(user_id, code, query, context):
-    """انجام عملیات احراز هویت در پس‌زمینه"""
-    try:
         client = clients.get(user_id)
         login_info = login_data[user_id]
 
-        if not client:
-            await query.message.reply_text("❌ کلاینت یافت نشد.")
-            return
+        try:
+            if not client or not client.is_connected():
+                await client.connect()
 
-        # انجام Sign In در ترد اصلیِ کلاینت (اما غیرهمگام برای ربات اصلی)
-        await client.sign_in(
-            phone=login_info["phone"], 
-            code=code, 
-            phone_code_hash=login_info["phone_code_hash"]
-        )
-        
-        await query.message.reply_text("✅ ورود موفقیت‌آمیز بود! سلف‌بات فعال شد.", reply_markup=get_start_keyboard())
-        
-        register_handlers(client)
-        start_client_background(user_id, client)
-        
-        # پاکسازی
-        if user_id in login_data: del login_data[user_id]
-        
-    except PhoneCodeExpiredError:
-        await query.message.reply_text("❌ کد منقضی شده است. مجدد تلاش کنید.")
-    except PhoneCodeInvalidError:
-        await query.message.reply_text("❌ کد اشتباه است. لطفا دوباره تلاش کنید.")
-    except SessionPasswordNeededError:
-        await query.message.reply_text("🔐 اکانت رمز ۲ مرحله‌ای دارد. رمز را بفرستید:")
-        context.user_data["awaiting_password"] = True # ذخیره وضعیت برای مرحله بعد
-    except Exception as e:
-        await query.message.reply_text(f"❌ خطای احراز هویت: {e}")
+            await client.sign_in(phone=login_info["phone"], code=current_code, phone_code_hash=login_info["phone_code_hash"])
+            await query.message.reply_text("✅ ورود موفقیت‌آمیز بود! سلف‌بات شما فعال شد.", reply_markup=get_start_keyboard())
+
+            register_handlers(client)
+            
+            # 🟢 اجرای امن سلف‌بات تازه فعال‌شده در پس‌زمینه
+            start_client_background(user_id, client)
+            
+            del login_data[user_id]
+            return ConversationHandler.END
+
+        except PhoneCodeExpiredError:
+            await query.message.reply_text("❌ کد منقضی شده است. لطفا دوباره از ابتدا تلاش کنید.", reply_markup=get_start_keyboard())
+            return ConversationHandler.END
+        except PhoneCodeInvalidError:
+            await query.answer("❌ کد وارد شده اشتباه است! مجدد وارد کنید.", show_alert=True)
+            context.user_data["telegram_code"] = ""
+            await query.edit_message_text("🔢 **کد اشتباه بود. دوباره وارد کنید:**\n\n✍️ کد وارد شده: ", reply_markup=get_code_keyboard(""))
+            return CODE
+        except SessionPasswordNeededError:
+            await query.message.reply_text("🔐 این اکانت رمز ۲ مرحله‌ای دارد، لطفاً رمز خود را به صورت متنی وارد کنید:")
+            return PASSWORD
+        except Exception as e:
+            await query.message.reply_text(f"❌ خطای غیرمنتظره:\n{e}", reply_markup=get_start_keyboard())
+            return ConversationHandler.END
 
 
 async def get_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     password = update.message.text.strip()
-    
-    # نمایش پیام وضعیت به کاربر
-    status_msg = await update.message.reply_text("⏳ در حال بررسی رمز دو مرحله‌ای...")
+    client = clients.get(user_id)
 
-    # انتقال عملیات احراز هویت رمز به یک تسک پس‌زمینه
-    asyncio.create_task(perform_async_password_signin(user_id, password, status_msg))
-    
-    return ConversationHandler.END
+    if not client:
+        await update.message.reply_text("❌ خطایی رخ داد. لطفا دوباره تلاش کنید.", reply_markup=get_start_keyboard())
+        return ConversationHandler.END
 
-async def perform_async_password_signin(user_id, password, status_msg):
-    """انجام Sign In با رمز در پس‌زمینه"""
     try:
-        client = clients.get(user_id)
-        if not client:
-            await status_msg.edit_text("❌ کلاینت یافت نشد. لطفاً دوباره /start بزنید.")
-            return
+        if not client.is_connected():
+            await client.connect()
 
-        # انجام عملیات سنگین در پس‌زمینه
         await client.sign_in(password=password)
-        
-        await status_msg.edit_text("✅ ورود موفقیت‌آمیز بود! سلف‌بات شما فعال شد.")
-        
+        await update.message.reply_text("✅ ورود با رمز دو مرحله‌ای موفقیت‌آمیز بود! سلف‌بات شما فعال شد.", reply_markup=get_start_keyboard())
         register_handlers(client)
-        start_client_background(user_id, client)
         
-        # پاکسازی داده‌های موقت لاگین
+        # 🟢 اجرای امن پس از لاگین با رمز دو مرحله‌ای
+        start_client_background(user_id, client)
+
         if user_id in login_data:
             del login_data[user_id]
-            
+        return ConversationHandler.END
     except Exception as e:
-        await status_msg.edit_text(f"❌ رمز عبور اشتباه است یا خطایی رخ داده:\n{e}\n\nلطفاً دوباره /start بزنید.")
+        await update.message.reply_text(f"❌ رمز عبور اشتباه است یا خطایی رخ داده:\n{e}\n\nلطفاً دوباره رمز عبور را ارسال کنید:")
+        return PASSWORD
+
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return await start(update, context)
