@@ -570,7 +570,7 @@ async def handle_panel_clicks(update, context):
             "ویرایش شده و رسانه‌های تایم‌دار را مدیریت کنید.</blockquote>"
         )
         
-        reply_markup = await get_guard_keyboard(config, owner_id)
+        reply_markup = get_guard_keyboard(config, owner_id)
         try:
             await query.edit_message_text(text=guard_text, parse_mode="HTML", reply_markup=reply_markup)
         except: pass
