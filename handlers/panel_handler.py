@@ -255,7 +255,7 @@ async def handle_panel_clicks(update, context):
 
     # 1️⃣ منوی اصلی: بازگشت به ریشه
     if data.startswith("panel_main_"):
-        main_text = "› **Panel Management**\n\nبه منوی مدیریت هوما خوش آمدید. لطفاً یک بخش را انتخاب کنید:"
+        main_text = "Panel Management\n\nبه منوی مدیریت هوما خوش آمدید. لطفاً یک بخش را انتخاب کنید:"
         keyboard = [
             [
                 InlineKeyboardButton("👤 اکانت من", callback_data=f"panel_acc_{owner_id}"),
@@ -270,12 +270,8 @@ async def handle_panel_clicks(update, context):
 
     # 2️⃣ زیرمنوی: حساب کاربری
     elif data.startswith("panel_acc_"):
-        print(">>> panel_acc clicked")
-        print("1")
         user_name = query.from_user.first_name
-        print("2")
         username = f"@{query.from_user.username}" if query.from_user.username else "ندارد"
-        print("3")
         user_gold_balance = 0  
         
         try:
@@ -297,11 +293,11 @@ async def handle_panel_clicks(update, context):
             print(f"⚠️ Error fetching diamonds from Supabase: {db_error}")
 
         caption_text = (
-            f"› <b>اطلاعات حساب کاربری</b>\n\n"
-            f"› <b>نام:</b> {user_name}\n"
-            f"› <b>یوزرنیم:</b> {username}\n"
-            f"› <b>آیدی عددی:</b> <code>{owner_id}</code>\n"
-            f"› <b>موجود طلا:</b> {user_gold_balance:,}"
+            f"<b>اطلاعات حساب کاربری</b>\n\n"
+            f"<b>نام:</b> {user_name}\n"
+            f"<b>یوزرنیم:</b> {username}\n"
+            f"<b>آیدی عددی:</b> <code>{owner_id}</code>\n"
+            f"<b>موجود طلا:</b> {user_gold_balance:,}"
         )
         keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_main_{owner_id}")]]
         try:
@@ -310,7 +306,6 @@ async def handle_panel_clicks(update, context):
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
-            print("8")
         except Exception:
             import traceback
             traceback.print_exc()

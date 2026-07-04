@@ -63,7 +63,7 @@ async def inline_panel_handler(update, context):
                     title="🤖 پنل مدیریت سلف‌بات",
                     description="ارسال منوی مدیریت تودرتو",
                     input_message_content=InputTextMessageContent(
-                        f"› **Panel Management**\n\nبه منوی مدیریت هوما خوش آمدید. لطفاً یک بخش را انتخاب کنید:"
+                        f"Panel Management\n\nبه منوی مدیریت هوما خوش آمدید. لطفاً یک بخش را انتخاب کنید:"
                     ),
                     reply_markup=reply_markup
                 )
