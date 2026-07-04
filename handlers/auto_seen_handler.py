@@ -9,40 +9,30 @@ def register_auto_seen_handler(client):
     # ۱. هندلر پردازش سین خودکار
     @client.on(events.NewMessage(incoming=True))
     async def auto_seen_worker(event):
-        # اگر کانال بود یا پیام از طرف خودمان بود، کاری انجام نده
         if event.is_channel or event.out: 
             return 
         
         try:
-            # استخراج آیدی صاحب اکانت
             if not hasattr(event.client, '_cached_my_id') or event.client._cached_my_id is None:
                 me = await event.client.get_me()
                 event.client._cached_my_id = me.id
-            
             owner_id = event.client._cached_my_id
             
-            # === بررسی وضعیت سین خودکار ===
+            # خواندن از دیتابیس
             try:
                 from utils import get_auto_seen_from_db
+                config = await get_auto_seen_from_db(owner_id)
                 
-                # همیشه از دیتابیس بخون تا مشکل کش حل بشه
-                db_status = await get_auto_seen_from_db(owner_id)
-                
-                # مهم: حالا bool درست چک می‌کنیم
-                is_active = bool(db_status.get("auto_seen", False)) if isinstance(db_status, dict) else bool(db_status)
-                
-                # آپدیت کش
+                is_active = bool(config.get("auto_seen", False))
                 AUTO_SEEN_CACHE[owner_id] = is_active
                 
             except Exception as db_err:
-                print(f"Error reading auto_seen from DB: {db_err}")
+                print(f"DB error in auto_seen_worker: {db_err}")
                 is_active = AUTO_SEEN_CACHE.get(owner_id, False)
             
-            # اگر خاموش بود، زود خارج شو (تا هندلرهای دیگه مثل منشی کار کنند)
             if not is_active:
                 return 
                 
-            # ارسال درخواست سین
             await event.client(functions.messages.ReadHistoryRequest(
                 peer=event.peer_id,
                 max_id=event.id
@@ -52,8 +42,8 @@ def register_auto_seen_handler(client):
             if "FloodWaitError" in str(e) or "TooMany" in str(e):
                 await asyncio.sleep(5)
             else:
-                print(f"Auto seen worker error: {e}")
-
+                print(f"Auto seen error: {e}")
+                
     # ۲. دستور تغییر وضعیت با متن
     @client.on(events.NewMessage(pattern=r"^\*?(سین خودکار) (روشن|خاموش)$", outgoing=True))
     async def toggle_seen_via_text(event):

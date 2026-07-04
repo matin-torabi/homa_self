@@ -368,21 +368,20 @@ async def save_chat_guard_to_db(owner_id: int, update_data: dict):
 
 # --- 👀 سیستم سین خودکار چت‌ها (Auto Seen Engine) ---
 
-async def get_auto_seen_from_db(owner_id: int) -> bool:
+async def get_auto_seen_from_db(owner_id: int) -> dict:
     try:
-        query = supabase.table("auto_seen_settings").select("auto_seen").eq("user_id", int(owner_id))
+        query = supabase.table("auto_seen_settings").select("*").eq("user_id", int(owner_id))
         response = await db_execute(query)
         
         if response.data and len(response.data) > 0:
-            return bool(response.data[0].get("auto_seen", True))
+            return response.data[0]
         
-        # اگر رکورد وجود نداشت، پیش‌فرض False بذار (بهتره)
-        return False
+        # پیش‌فرض: خاموش
+        return {"user_id": owner_id, "auto_seen": False}
         
     except Exception as e:
         print(f"Error fetching auto seen: {e}")
-        return False  # در صورت خطا هم False باشه
-
+        return {"user_id": owner_id, "auto_seen": False}
 
 async def save_auto_seen_to_db(owner_id: int, status: bool):
     try:

@@ -639,11 +639,18 @@ async def handle_panel_clicks(update, context):
         
         from utils import get_auto_seen_from_db
         config = await get_auto_seen_from_db(owner_id)
-            
-        status_word = "روشن" if config.get("auto_seen", True) else "خاموش"
+        
+        # ←←← اصلاح مهم: پشتیبانی از dict و bool
+        if isinstance(config, dict):
+            auto_seen_status = config.get("auto_seen", False)
+        else:
+            auto_seen_status = bool(config)
+        
+        status_word = "روشن" if auto_seen_status else "خاموش"
         seen_text = f"<blockquote>وضعیت : {status_word}</blockquote>"
         
         reply_markup = get_seen_keyboard(config, owner_id)
+        
         try:
             await query.edit_message_text(text=seen_text, parse_mode="HTML", reply_markup=reply_markup)
         except Exception as e: 
