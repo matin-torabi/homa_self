@@ -270,6 +270,7 @@ async def handle_panel_clicks(update, context):
 
     # 2️⃣ زیرمنوی: حساب کاربری
     elif data.startswith("panel_acc_"):
+        print(">>> panel_acc clicked")
         user_name = query.from_user.first_name
         username = f"@{query.from_user.username}" if query.from_user.username else "ندارد"
         user_gold_balance = 0  
