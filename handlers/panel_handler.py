@@ -279,10 +279,10 @@ async def handle_panel_clicks(update, context):
             clean_owner_id = int(owner_id)
             
             # ایجاد کوئری
-            query = supabase.table("users_diamonds").select("diamonds").eq("user_id", clean_owner_id)
+            db_query = supabase.table("users_diamonds").select("diamonds").eq("user_id", clean_owner_id)
             
             # اجرای غیرهمزمان با تابع کمکی
-            response = await db_execute(query)
+            response = await db_execute(db_query)
             
             if response.data:
                 user_gold_balance = response.data[0].get("diamonds", 0)
