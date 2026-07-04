@@ -303,12 +303,15 @@ async def handle_panel_clicks(update, context):
         )
         keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_main_{owner_id}")]]
         try:
-            print("7")
-            print(caption_text)
-            await query.edit_message_text(text=caption_text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+            await query.edit_message_text(
+                text=caption_text,
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
             print("8")
-        except telegram.error.BadRequest as e:
-            if "Message is not modified" in str(e): pass
+        except Exception:
+            import traceback
+            traceback.print_exc()
 
     # 3️⃣ زیرمنوی اصلی: تنظیمات سلف
     elif data.startswith("panel_sett_"):
