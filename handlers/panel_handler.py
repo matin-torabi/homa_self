@@ -294,18 +294,18 @@ async def handle_panel_clicks(update, context):
                 user_gold_balance = response.data[0].get("diamonds", 0)
         except Exception as db_error:
             print(f"⚠️ Error fetching diamonds from Supabase: {db_error}")
-        caption_text = (
-            f" › **اطلاعات حساب کاربری**\n\n"
-            f"› **نام:** {user_name}\n"
-            f"› **یوزرنیم:** {username}\n"
-            f"› **آیدی عددی:** `{owner_id}`\n"
-            f"› **موجود طلا:** {user_gold_balance}"
-        )
+            caption_text = (
+                f"› <b>اطلاعات حساب کاربری</b>\n\n"
+                f"› <b>نام:</b> {user_name}\n"
+                f"› <b>یوزرنیم:</b> {username}\n"
+                f"› <b>آیدی عددی:</b> <code>{owner_id}</code>\n"
+                f"› <b>موجود طلا:</b> {user_gold_balance:,}"
+            )
         keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_main_{owner_id}")]]
         try:
             await query.edit_message_text(
                 text=caption_text,
-                parse_mode="Markdown",
+                parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
             print("8")
