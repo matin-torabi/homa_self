@@ -8,8 +8,8 @@ API_HASH = "0bb4503a1c1bcdf74b01bd8fa4580d75"
 SESSION_NAME="my_selfbot"
 
 BOT_TOKEN = "8978251563:AAGfmEIQXTbDihh3KyBn0vGx349A3YDX9VQ" 
-PANEL_BOT_TOKEN = "8953604452:AAFY80ej-MlFbpG84k1yGAmEnIAxW31kVdI"
-BOT_USERNAME = "Homa_panel_self_bot"
+PANEL_BOT_TOKEN = "8897179845:AAFrHmB7XdTKfy592fEO-A6Gr13nXsHaPs8"
+BOT_USERNAME = "Homa_panel_dev_bot"
 
 CHANNELS = [
     {'id': "@Homa_self_Ch", 'url': "https://t.me/Homa_self_Ch"},

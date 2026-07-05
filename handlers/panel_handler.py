@@ -83,7 +83,7 @@ def register_panel_handler(client):
     # 🎯 فیکس پترن: حالا فقط وقتی کاربر دقیقاً بنویسد "*پنل" دستور اجرا می‌شود
     @client.on(events.NewMessage(outgoing=True, pattern=r'^\*پنل$'))
     async def handle_self_panel_command(event):
-        bot_username = "Homa_panel_self_bot"
+        bot_username = "Homa_panel_dev_bot"
         try:
             inline_results = await event.client.inline_query(bot_username, 'get_self_panel')
             if inline_results:
