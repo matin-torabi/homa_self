@@ -39,8 +39,8 @@ def get_calculator_keyboard(owner_id):
             InlineKeyboardButton("+", callback_data=f"clc_add_{owner_id}")
         ],
         [
-            InlineKeyboardButton("C", callback_data=f"clc_clear_{owner_id}"),
-            InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")
+            InlineKeyboardButton("C", callback_data=f"clc_clear_{owner_id}", style="danger"),
+            InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")
         ]
     ])
 
@@ -52,30 +52,29 @@ async def get_locks_keyboard(owner_id):
             "username": False, "link": False, "reply": False, "photo": False,
             "gif": False, "sticker": False, "pv": False, "forward": False
         }
-    
-    # تابع کوچک برای نمایش اموجی وضعیت (✅ برای روشن / ❌ برای خاموش)
-    def status_emoji(key):
-        return "✅" if locks.get(key, False) else "❌"
+
+    def status_color(key):
+        return "success" if locks.get(key, False) else "danger"
 
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton(f"قفل یوزرنیم ({status_emoji('username')})", callback_data=f"tog_username_{owner_id}"),
-            InlineKeyboardButton(f"قفل لینک ({status_emoji('link')})", callback_data=f"tog_link_{owner_id}")
+            InlineKeyboardButton(f"قفل یوزرنیم", callback_data=f"tog_username_{owner_id}", style=f"{status_color('username')}"),
+            InlineKeyboardButton(f"قفل لینک", callback_data=f"tog_link_{owner_id}", style=f"{status_color('link')}")
         ],
         [
-            InlineKeyboardButton(f"قفل ریپلای ({status_emoji('reply')})", callback_data=f"tog_reply_{owner_id}"),
-            InlineKeyboardButton(f"قفل عکس ({status_emoji('photo')})", callback_data=f"tog_photo_{owner_id}")
+            InlineKeyboardButton(f"قفل ریپلای", callback_data=f"tog_reply_{owner_id}", style=f"{status_color('reply')}"),
+            InlineKeyboardButton(f"قفل عکس", callback_data=f"tog_photo_{owner_id}", style=f"{status_color('photo')}")
         ],
         [
-            InlineKeyboardButton(f"قفل گیف ({status_emoji('gif')})", callback_data=f"tog_gif_{owner_id}"),
-            InlineKeyboardButton(f"قفل استیکر ({status_emoji('sticker')})", callback_data=f"tog_sticker_{owner_id}")
+            InlineKeyboardButton(f"قفل گیف", callback_data=f"tog_gif_{owner_id}", style=f"{status_color('gif')}"),
+            InlineKeyboardButton(f"قفل استیکر", callback_data=f"tog_sticker_{owner_id}", style=f"{status_color('sticher')}")
         ],
         [
-            InlineKeyboardButton(f"قفل پیوی ({status_emoji('pv')})", callback_data=f"tog_pv_{owner_id}"),
-            InlineKeyboardButton(f"قفل فوروارد ({status_emoji('forward')})", callback_data=f"tog_forward_{owner_id}")
+            InlineKeyboardButton(f"قفل پیوی", callback_data=f"tog_pv_{owner_id}", style=f"{status_color('pv')}"),
+            InlineKeyboardButton(f"قفل فوروارد", callback_data=f"tog_forward_{owner_id}", style=f"{status_color('forward')}")
         ],
         [
-            InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")
+            InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")
         ]
     ])
 
@@ -84,7 +83,7 @@ def register_panel_handler(client):
     # 🎯 فیکس پترن: حالا فقط وقتی کاربر دقیقاً بنویسد "*پنل" دستور اجرا می‌شود
     @client.on(events.NewMessage(outgoing=True, pattern=r'^\*پنل$'))
     async def handle_self_panel_command(event):
-        bot_username = "maho_panel_bot" # یوزرنیم ربات پنل شما بدون @
+        bot_username = "Homa_panel_dev_bot"
         try:
             inline_results = await event.client.inline_query(bot_username, 'get_self_panel')
             if inline_results:
@@ -103,12 +102,12 @@ def register_panel_handler(client):
 def get_secretary_keyboard(enabled_status: bool, owner_id: int) -> InlineKeyboardMarkup:
     """ساخت منوی منشی بر اساس وضعیت زنده سوپابیس"""
     # تغییر ظاهر و وضعیت متن دکمه شیشه‌ای منشی
-    btn_text = "منشی (✅)" if enabled_status else "منشی (❌)"
+    btn_style = "success" if enabled_status else "danger"
     
     keyboard = [
         # ساختار کالبک دیتا: sec_toggle_ownerId -> بخش سوم آیدی کاربر است و کرش نمی‌کند
-        [InlineKeyboardButton(btn_text, callback_data=f"sec_toggle_{owner_id}")],
-        [InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]
+        [InlineKeyboardButton("منشی", callback_data=f"sec_toggle_{owner_id}", style=btn_style)],
+        [InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -118,70 +117,89 @@ def get_guard_keyboard(config, owner_id):
     save_deleted = config.get("save_deleted", True)
     save_edited = config.get("save_edited", True)
     save_ttl = config.get("save_ttl", True)
-    
-    # فرمت‌دهی دقیق دکمه‌ها طبق پترن درخواستی شما
-    status_deleted = f"ذخیره پیام حذف شده ({'✔' if save_deleted else '❌'})"
-    status_edited = f"ذخیره ویرایش شده ({'✔' if save_edited else '❌'})"
-    status_ttl = f"ذخیره عکس تایمی ({'✔' if save_ttl else '❌'})"
-    
+
     keyboard = [
-        [InlineKeyboardButton(status_deleted, callback_data=f"grd_toggle_del_{owner_id}")],
-        [InlineKeyboardButton(status_edited, callback_data=f"grd_toggle_edt_{owner_id}")],
-        [InlineKeyboardButton(status_ttl, callback_data=f"grd_toggle_ttl_{owner_id}")],
-        [InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]
+        [
+            InlineKeyboardButton(
+                "ذخیره پیام حذف شده ",
+                callback_data=f"grd_toggle_del_{owner_id}",
+                style="success" if save_deleted else "danger",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "ذخیره ویرایش شده",
+                callback_data=f"grd_toggle_edt_{owner_id}",
+                style="success" if save_edited else "danger",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "ذخیره عکس تایمی",
+                callback_data=f"grd_toggle_ttl_{owner_id}",
+                style="success" if save_ttl else "danger",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "« بازگشت",
+                callback_data=f"panel_sett_{owner_id}",
+                style="primary",
+            )
+        ]
     ]
+
     return InlineKeyboardMarkup(keyboard)
 
 def get_seen_keyboard(config, owner_id):
     auto_seen = config.get("auto_seen", True) if config else True
-    status_seen = f"سین خودکار ({'✔' if auto_seen else '❌'})"
+    seen_style = "success" if auto_seen else "danger"
     
     keyboard = [
         # پترن ۳ بخشی اختصاصی بدون کلمات مشترک با بخش‌های دیگر پنل تو
-        [InlineKeyboardButton(status_seen, callback_data=f"toggle_seen_{owner_id}")],
+        [InlineKeyboardButton("سین خودکار ", callback_data=f"toggle_seen_{owner_id}", style=seen_style)],
         # دکمه بازگشت هماهنگ با پنل تنظیمات اصلی تو
-        [InlineKeyboardButton("» بازگشت", callback_data=f"panel_sett_{owner_id}")]
+        [InlineKeyboardButton("» بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
 def get_force_join_keyboard(config, channels_count, owner_id):
     is_enabled = config.get("enabled", False) if config else False
-    status_text = f"عضویت اجباری ({'✔' if is_enabled else '❌'}) [{channels_count}/15]"
+    text_style = "success" if is_enabled else "danger"
     
     keyboard = [
-        [InlineKeyboardButton(status_text, callback_data=f"fj_toggle_{owner_id}")],
-        [InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]
+        [InlineKeyboardButton("عضویت اجباری", callback_data=f"fj_toggle_{owner_id}", style=text_style)],
+        [InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
 def build_textmode_keyboard(owner_id: int, current_mode: str) -> InlineKeyboardMarkup:
-    """ساخت دکمه‌ها و نمایش تیک فعال (✔️) یا غیرفعال (❌) دقیقاً مثل عکس منو"""
     modes = {
         "bold": "بولد", "italic": "ایتالیک", "strike": "خط‌خورده", "mono": "تک‌فاصله",
         "quote": "نقل قول", "underline": "زیرخط", "spoiler": "اسپویلر", "gradient": "تدریجی"
     }
     
     # تعیین وضعیت ضربدر یا تیک دکمه‌ها بر اساس مود فعلی دیتابیس
-    st = {k: "✔️" if current_mode == k else "❌" for k in modes.keys()}
+    st = {k: "success" if current_mode == k else "danger" for k in modes.keys()}
     
     keyboard = [
         [
-            InlineKeyboardButton(f"نقل قول ({st['quote']})", callback_data=f"tmode_quote_{owner_id}"),
-            InlineKeyboardButton(f"بولد ({st['bold']})", callback_data=f"tmode_bold_{owner_id}")
+            InlineKeyboardButton(f"نقل قول", callback_data=f"tmode_quote_{owner_id}", style=f"{st['quote']}"),
+            InlineKeyboardButton(f"بولد", callback_data=f"tmode_bold_{owner_id}", style=f"{st['bold']}")
         ],
         [
-            InlineKeyboardButton(f"زیرخط ({st['underline']})", callback_data=f"tmode_underline_{owner_id}"),
-            InlineKeyboardButton(f"ایتالیک ({st['italic']})", callback_data=f"tmode_italic_{owner_id}")
+            InlineKeyboardButton(f"زیرخط", callback_data=f"tmode_underline_{owner_id}", style=f"{st['underline']}"),
+            InlineKeyboardButton(f"ایتالیک", callback_data=f"tmode_italic_{owner_id}", style=f"{st['italic']}")
         ],
         [
-            InlineKeyboardButton(f"اسپویلر ({st['spoiler']})", callback_data=f"tmode_spoiler_{owner_id}"),
-            InlineKeyboardButton(f"خط‌خورده ({st['strike']})", callback_data=f"tmode_strike_{owner_id}")
+            InlineKeyboardButton(f"اسپویلر", callback_data=f"tmode_spoiler_{owner_id}", style=f"{st['spoiler']}"),
+            InlineKeyboardButton(f"خط‌خورده", callback_data=f"tmode_strike_{owner_id}", style=f"{st['strike']}")
         ],
         [
-            InlineKeyboardButton(f"تدریجی ({st['gradient']})", callback_data=f"tmode_gradient_{owner_id}"),
-            InlineKeyboardButton(f"تک‌فاصله ({st['mono']})", callback_data=f"tmode_mono_{owner_id}")
+            InlineKeyboardButton(f"تدریجی", callback_data=f"tmode_gradient_{owner_id}", style=f"{st['gradient']}"),
+            InlineKeyboardButton(f"تک‌فاصله", callback_data=f"tmode_mono_{owner_id}", style=f"{st['mono']}")
         ],
-        [InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]
+        [InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -196,39 +214,39 @@ def build_action_keyboard(owner_id: int, current_action: str) -> InlineKeyboardM
     }
     
     # ست کردن تیک ضربدر یا تیک سبز وضعیت
-    st = {k: "✔️" if current_action == k else "❌" for k in actions.keys()}
+    st = {k: "success" if current_action == k else "danger" for k in actions.keys()}
     
     keyboard = [
         [
-            InlineKeyboardButton(f"ویس ({st['record-audio']})", callback_data=f"action_record-audio_{owner_id}"),
-            InlineKeyboardButton(f"تایپ ({st['typing']})", callback_data=f"action_typing_{owner_id}")
+            InlineKeyboardButton(f"ویس", callback_data=f"action_record-audio_{owner_id}", style=f"{st['record-audio']}"),
+            InlineKeyboardButton(f"تایپ ", callback_data=f"action_typing_{owner_id}", style=f"{st['typing']}")
         ],
         [
-            InlineKeyboardButton(f"عکس ({st['upload-photo']})", callback_data=f"action_upload-photo_{owner_id}"),
-            InlineKeyboardButton(f"ویدیو گرد ({st['record-round']})", callback_data=f"action_record-round_{owner_id}")
+            InlineKeyboardButton(f"عکس", callback_data=f"action_upload-photo_{owner_id}", style=f"{st['upload-photo']}"),
+            InlineKeyboardButton(f"ویدیو گرد", callback_data=f"action_record-round_{owner_id}", style=f"{st['record-round']}")
         ],
         [
-            InlineKeyboardButton(f"سند ({st['upload-document']})", callback_data=f"action_upload-document_{owner_id}"),
-            InlineKeyboardButton(f"ویدیو ({st['upload-video']})", callback_data=f"action_upload-video_{owner_id}")
+            InlineKeyboardButton(f"سند", callback_data=f"action_upload-document_{owner_id}", style=f"{st['upload-document']}"),
+            InlineKeyboardButton(f"ویدیو", callback_data=f"action_upload-video_{owner_id}", style=f"{st['upload-video']}")
         ],
         [
-            InlineKeyboardButton(f"بازی ({st['playing']})", callback_data=f"action_playing_{owner_id}"),
-            InlineKeyboardButton(f"استیکر ({st['choose-sticker']})", callback_data=f"action_choose-sticker_{owner_id}")
+            InlineKeyboardButton(f"بازی ", callback_data=f"action_playing_{owner_id}", style=f"{st['playing']}"),
+            InlineKeyboardButton(f"استیکر", callback_data=f"action_choose-sticker_{owner_id}", style=f"{st['choose-sticker']}")
         ],
-        [InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]
+        [InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
 def build_filter_keyboard(owner_id: int, config: dict) -> InlineKeyboardMarkup:
     """ساخت دکمه‌های منوی فیلتر کلمات بر اساس الگوی تصویر پنجم"""
     is_enabled = config.get("enabled", False)
-    status_emoji = "✔️" if is_enabled else "❌"
+    emoji_style = "success" if is_enabled else "danger"
     
     keyboard = [
         # دکمه وضعیت اصلی سیستم فیلتر کلمات
-        [InlineKeyboardButton(f"فیلتر کلمات ({status_emoji})", callback_data=f"toggle_filter_status_{owner_id}")],
+        [InlineKeyboardButton(f"فیلتر کلمات", callback_data=f"toggle_filter_status_{owner_id}", style=emoji_style)],
         # دکمه بازگشت به منوی تنظیمات اصلی
-        [InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]
+        [InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -258,10 +276,10 @@ async def handle_panel_clicks(update, context):
         main_text = "Panel Management\n\nبه منوی مدیریت هوما خوش آمدید. لطفاً یک بخش را انتخاب کنید:"
         keyboard = [
             [
-                InlineKeyboardButton("👤 اکانت من", callback_data=f"panel_acc_{owner_id}"),
-                InlineKeyboardButton("مدیریت و راهنمایی", callback_data=f"panel_sett_{owner_id}")
+                InlineKeyboardButton("👤 اکانت من", callback_data=f"panel_acc_{owner_id}", style="primary"),
+                InlineKeyboardButton("مدیریت و راهنمایی", callback_data=f"panel_sett_{owner_id}", style="success")
             ],
-            [InlineKeyboardButton("❌ بستن پنل", callback_data=f"panel_close_{owner_id}")]
+            [InlineKeyboardButton("❌ بستن پنل", callback_data=f"panel_close_{owner_id}", style="danger")]
         ]
         try:
             await query.edit_message_text(text=main_text, reply_markup=InlineKeyboardMarkup(keyboard))
@@ -292,14 +310,16 @@ async def handle_panel_clicks(update, context):
         except Exception as db_error:
             print(f"⚠️ Error fetching diamonds from Supabase: {db_error}")
 
+        toman_balance = user_gold_balance * 35
         caption_text = (
             f"<b>اطلاعات حساب کاربری</b>\n\n"
             f"<b>نام:</b> {user_name}\n"
             f"<b>یوزرنیم:</b> {username}\n"
             f"<b>آیدی عددی:</b> <code>{owner_id}</code>\n"
-            f"<b>موجود طلا:</b> {user_gold_balance:,}"
+            f"<b>موجود طلا:</b> {user_gold_balance:,}\n"
+            f"<b>معادل تومان:</b> {toman_balance:,} تومان"
         )
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_main_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_main_{owner_id}", style="primary")]]
         try:
             await query.edit_message_text(
                 text=caption_text,
@@ -377,7 +397,7 @@ async def handle_panel_clicks(update, context):
                 # InlineKeyboardButton("قیمت ارز", callback_data=f"sett_currency_{owner_id}"),
                 InlineKeyboardButton("کامنت اول", callback_data=f"sett_comment_{owner_id}")
             ],
-            [InlineKeyboardButton("« بازگشت", callback_data=f"panel_main_{owner_id}")]
+            [InlineKeyboardButton("« بازگشت", callback_data=f"panel_main_{owner_id}", style="primary")]
         ]
         try:
             await query.edit_message_text(text=settings_text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
@@ -393,7 +413,7 @@ async def handle_panel_clicks(update, context):
             ">  `\*پینگ`"  
         )
         
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(
@@ -425,7 +445,7 @@ async def handle_panel_clicks(update, context):
 
         )
         
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(
@@ -786,7 +806,7 @@ async def handle_panel_clicks(update, context):
             ">  `\*لوگو مهدی`"  
         )
         
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(
@@ -876,7 +896,7 @@ async def handle_panel_clicks(update, context):
         )
         
 
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(
@@ -904,7 +924,7 @@ async def handle_panel_clicks(update, context):
             ">  `*پایان اسپم`\n"
         )
         
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(
@@ -932,7 +952,7 @@ async def handle_panel_clicks(update, context):
             ">  `*پاکسازی سکوت`\n"
         )
         
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(
@@ -957,10 +977,10 @@ async def handle_panel_clicks(update, context):
         # ساخت همان دو دکمه سبز رنگ تصویر شما
         keyboard = [
             [
-                InlineKeyboardButton("دانلود از چنل پرایوت", callback_data=f"down_private_{owner_id}"),
-                InlineKeyboardButton("دانلود از اینستا", callback_data=f"down_insta_{owner_id}")
+                InlineKeyboardButton("دانلود از چنل پرایوت", callback_data=f"down_private_{owner_id}", style="success"),
+                InlineKeyboardButton("دانلود از اینستا", callback_data=f"down_insta_{owner_id}", style="danger")
             ],
-            [InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]
+            [InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]
         ]
         
         try:
@@ -987,7 +1007,7 @@ async def handle_panel_clicks(update, context):
         )
         
         # بازگشت به منوی قبلی یعنی همان sett_down_
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"sett_down_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"sett_down_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(
@@ -1013,7 +1033,7 @@ async def handle_panel_clicks(update, context):
         )
         
         # بازگشت به منوی قبلی یعنی همان sett_down_
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"sett_down_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"sett_down_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(
@@ -1037,10 +1057,10 @@ async def handle_panel_clicks(update, context):
         # ساخت دکمه‌های مطابق با تصویر دوم (image_a8e48a.png)
         keyboard = [
             [
-                InlineKeyboardButton("دشمن ☠️", callback_data=f"fr_enemy_{owner_id}"),
-                InlineKeyboardButton("دوست 🤝", callback_data=f"fr_friend_{owner_id}")
+                InlineKeyboardButton("دشمن ☠️", callback_data=f"fr_enemy_{owner_id}", style="danger"),
+                InlineKeyboardButton("دوست 🤝", callback_data=f"fr_friend_{owner_id}", style="success")
             ],
-            [InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]
+            [InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]
         ]
         
         try:
@@ -1073,7 +1093,7 @@ async def handle_panel_clicks(update, context):
         )
         
         # بازگشت به منوی قبلی یعنی همان sett_fr_en_
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"sett_fr_en_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"sett_fr_en_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(
@@ -1105,7 +1125,7 @@ async def handle_panel_clicks(update, context):
         )
         
         # بازگشت به منوی قبلی یعنی همان sett_fr_en_
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"sett_fr_en_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"sett_fr_en_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(
@@ -1125,7 +1145,7 @@ async def handle_panel_clicks(update, context):
             ">  `*آیدی`\n"
         )
         
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(
@@ -1149,7 +1169,7 @@ async def handle_panel_clicks(update, context):
             ">  `*تگ اعضا`\n"
         )
         
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(
@@ -1173,7 +1193,7 @@ async def handle_panel_clicks(update, context):
             ">  `*آن بلاک`\n"
         )
         
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(
@@ -1199,7 +1219,7 @@ async def handle_panel_clicks(update, context):
             ">  این دستور تعداد مشخصی از پیام های اخیر را حذف می کند حد اکثار 500 پیام\n"
         )
         
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(
@@ -1300,7 +1320,7 @@ async def handle_panel_clicks(update, context):
             ">  `*ai متن سوال`\n"
         )
         
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(
@@ -1325,7 +1345,7 @@ async def handle_panel_clicks(update, context):
 
         )
         
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(
@@ -1353,7 +1373,7 @@ async def handle_panel_clicks(update, context):
 
         )
         
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(
@@ -1378,7 +1398,7 @@ async def handle_panel_clicks(update, context):
             ">  `*متن کامنت مثلا سلام`\n"
         )
         
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(
@@ -1412,7 +1432,7 @@ async def handle_panel_clicks(update, context):
             ">  `*پاکسازی پاسخ`\n"
         )
         
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(
@@ -1444,7 +1464,7 @@ async def handle_panel_clicks(update, context):
             ">  `*عضویت اجباری خاموش`\n"
         )
         
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(
@@ -1503,7 +1523,7 @@ async def handle_panel_clicks(update, context):
             "\n"
             ">  `*قیمت ریپل`\n"
         )
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(
@@ -1543,7 +1563,7 @@ async def handle_panel_clicks(update, context):
             ">  `*گربه`\n"
         )
         
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(
@@ -1570,7 +1590,7 @@ async def handle_panel_clicks(update, context):
 
         )
         
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(
@@ -1592,7 +1612,7 @@ async def handle_panel_clicks(update, context):
             ">  `*اسکرین`\n"
         )
         
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(
@@ -1616,7 +1636,7 @@ async def handle_panel_clicks(update, context):
             ">  `*بسکتبال`\n"
         )
         
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(
@@ -1638,7 +1658,7 @@ async def handle_panel_clicks(update, context):
             ">  `*پروکسی`\n"
         )
         
-        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}")]]
+        keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]]
         
         try:
             await query.edit_message_text(

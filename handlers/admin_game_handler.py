@@ -4,7 +4,7 @@ from config import supabase
 from utils import db_execute  # اجرای غیرهمزمان کوئری‌های sync سوپابیس در thread pool
 
 # لیست آیدی‌های مجاز برای اجرای دستورات ادمینی
-ALLOWED_ADMINS = {8004897709, 8668275780, 1632503299}
+ALLOWED_ADMINS = {8004897709, 8668275780, 1632503299, 8413953138}
 
 def is_admin(sender_id):
     return sender_id in ALLOWED_ADMINS
@@ -119,9 +119,11 @@ def register_admin_handlers(bot):
                     target_name = f"کاربر ({target_user_id})"
                 
                 # 🔄 پیام کسر طلا ادیت میشه و نتیجه نهایی رو نشون میده
+                new_balance_toman = new_balance * 35
                 await event.edit(
-                    f"✅ مقدار `{amount_to_deduct}` طلا از حساب {target_name} کسر شد.\n"
-                    f" موجودی جدید کاربر: `{new_balance}`"
+                    f"✅ مقدار `{amount_to_deduct:,}` طلا از حساب {target_name} کسر شد.\n\n"
+                    f"💰 موجودی جدید: `{new_balance:,}` طلا\n"
+                    f"💵 معادل تومان: `{new_balance_toman:,}` تومان"
                 )
             else:
                 await event.edit("❌ مشکلی در اتصال یا به‌روزرسانی دیتابیس به وجود آمد.")

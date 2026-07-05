@@ -111,8 +111,8 @@ async def start_rps_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("✅ قبول", callback_data=f"rps_join_{game_id}"),
-            InlineKeyboardButton("❌ لغو بازی", callback_data=f"rps_cancel_{game_id}")
+            InlineKeyboardButton("قبول", callback_data=f"rps_join_{game_id}", style="success"),
+            InlineKeyboardButton("لغو بازی", callback_data=f"rps_cancel_{game_id}", style="danger")
         ]
     ])
 
@@ -250,9 +250,9 @@ async def send_game_choices_markup(query, game_id, game):
 
     keyboard = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("✊ سنگ", callback_data=f"rps_play_rock_{game_id}"),
-            InlineKeyboardButton("✋ کاغذ", callback_data=f"rps_play_paper_{game_id}"),
-            InlineKeyboardButton("✌️ قیچی", callback_data=f"rps_play_scissors_{game_id}")
+            InlineKeyboardButton("✊ سنگ", callback_data=f"rps_play_rock_{game_id}", style="primary"),
+            InlineKeyboardButton("✋ کاغذ", callback_data=f"rps_play_paper_{game_id}", style="success"),
+            InlineKeyboardButton("✌️ قیچی", callback_data=f"rps_play_scissors_{game_id}", style="danger")
         ]
     ])
     try:

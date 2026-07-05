@@ -41,10 +41,15 @@ def register_variz_handler(client):
                 return
 
             # ارسال پیام موفقیت و ویرایش پیام دستور
+            new_balance = await get_balance(target.id)
+
             await event.edit(
                 f"✅ <b>واریز موفقیت‌آمیز!</b>\n\n"
-                f"👤 گیرنده: {target.first_name}\n"
-                f"💰 مقدار: {amount:,} طلا", 
+                f"👤 <b>گیرنده:</b> {target.first_name}\n"
+                f"💰 <b>مقدار:</b> {amount:,} طلا\n"
+                f"💵 <b>معادل تومان:</b> {amount * 35:,} تومان\n\n"
+                f"💰 <b>موجودی جدید گیرنده:</b> {new_balance:,} طلا\n"
+                f"💵 <b>معادل تومان:</b> {new_balance * 35:,} تومان",
                 parse_mode='html'
             )
             

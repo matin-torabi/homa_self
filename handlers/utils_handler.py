@@ -24,6 +24,7 @@ def register_utils_handlers(client):
                     last_name = user.last_name if user.last_name else "❌ ندارد"
                     username = f"@{user.username}" if user.username else "❌ ندارد"
                     balance = await get_balance(user_id)
+                    toman_balance = balance * 35
 
                     response = (
                         "👤 **اطلاعات کاربر مورد نظر:**\n\n"
@@ -31,7 +32,8 @@ def register_utils_handlers(client):
                         f"🔹 **نام خانوادگی:** {last_name}\n"
                         f"🔹 **یوزرنیم:** {username}\n"
                         f"🆔 **آیدی عددی:** `{user.id}`\n"
-                        f"💰 **موجودی:** {balance}"
+                        f"💰 **موجودی:** {balance:,} طلا\n"
+                        f"💵 **معادل تومان:** {toman_balance:,} تومان"
                     )
                 except Exception as e:
                     print(f"Error fetching user entity: {e}")

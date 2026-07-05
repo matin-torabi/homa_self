@@ -1,6 +1,6 @@
 import os
 import asyncio
-from telethon import TelegramClient
+from telethon import TelegramClient, events
 from config import API_HASH, API_ID
 from config import supabase
 from utils import db_execute  # ایمپورت تابع مدیریت ترد
@@ -8,6 +8,20 @@ from utils import db_execute  # ایمپورت تابع مدیریت ترد
 # دیکشنری‌ها برای مدیریت کلاینت‌ها در وضعیت زنده
 clients = {}
 login_data = {}
+
+# 🚦 وضعیت لحظه‌ای مجاز بودن هر کاربر (در حافظه، بدون هزینه‌ی دیتابیس در هر پیام)
+# user_id -> bool
+user_status = {}
+
+# فاصله‌ی زمانی چک کردن موجودی از دیتابیس (ثانیه)
+# روی سرور ۲ گیگ CPU / ۴ گیگ RAM با ۱۰۰۰ کاربر، مقدار پایین‌تر فشار غیرضروری
+# به دیتابیس و event loop وارد می‌کنه؛ ۲۰ ثانیه تعادل خوبیه بین سرعت واکنش و مصرف منابع.
+STATUS_POLL_INTERVAL = 20
+
+# سقف تعداد کانکشن هم‌زمان تلگرام (هم برای لود اولیه، هم برای شارژهای گروهی در حین اجرا)
+CONNECTION_SEMAPHORE_LIMIT = 50
+_connection_semaphore = asyncio.Semaphore(CONNECTION_SEMAPHORE_LIMIT)
+
 
 def create_client(user_id: int):
     return TelegramClient(
@@ -21,6 +35,66 @@ def create_client(user_id: int):
         device_model="PC 64bit",
         app_version="5.1.1 X64",
     )
+
+
+def make_guard(user_id: int):
+    """
+    هندلر نگهبان اختصاصی هر کلاینت.
+    فقط یک dict lookup انجام می‌ده (هزینه‌ی تقریباً صفر روی CPU)،
+    اگر کاربر مجاز نباشه با StopPropagation جلوی اجرای بقیه‌ی
+    هندلرهای همون ایونت رو می‌گیره - بدون نیاز به تغییر تک‌تک فایل‌های handlers.
+    """
+    async def _guard(event):
+        if not user_status.get(user_id, False):
+            raise events.StopPropagation
+    return _guard
+
+
+def register_guard(client: TelegramClient, user_id: int):
+    """
+    این تابع باید همیشه قبل از register_handlers صدا زده بشه،
+    چون تلتون هندلرها رو به ترتیب ثبت‌شون اجرا می‌کنه.
+
+    فقط event typeهایی که واقعاً در پروژه استفاده می‌شن اینجا لیست شدن.
+    اگر جایی از فایل‌های handlers از event type دیگه‌ای استفاده شده
+    (مثلاً events.InlineQuery یا events.Album)، همون رو هم اضافه کن.
+    """
+    guard = make_guard(user_id)
+    for ev in (
+        events.NewMessage(),
+        events.CallbackQuery(),
+        events.ChatAction(),
+        events.MessageEdited(),
+        events.MessageDeleted(),
+        events.UserUpdate(),
+    ):
+        client.add_event_handler(guard, ev)
+
+
+def activate_client(client: TelegramClient, user_id: int):
+    """
+    نقطه‌ی واحد و مرکزی برای «فعال‌سازی کامل» یک کلاینت.
+
+    ⚠️ این تابع باید در تمام مسیرهایی که یک کلاینت را زنده می‌کنند صدا زده شود:
+    - لود اولیه‌ی برنامه (init_single_client)
+    - کلیک روی دکمه‌ی «روشن کردن سلف» در auth_handler.py
+    - اتمام موفق لاگین جدید (کد یا رمز دو مرحله‌ای) در auth_handler.py
+
+    قبلاً هرکدوم از این مسیرها جدا و به‌صورت ناقص register_handlers را صدا
+    می‌زدند و register_guard را فراموش می‌کردند؛ همین باعث می‌شد کاربرانی که
+    از طریق دکمه یا لاگین جدید فعال می‌شدند، هیچ‌وقت تحت کنترل موجودی نباشند.
+    """
+    clients[user_id] = client
+    user_status[user_id] = True
+    register_guard(client, user_id)   # همیشه قبل از register_handlers
+    register_handlers(client)
+
+
+def deactivate_client(user_id: int):
+    """پاک‌سازی وضعیت در حافظه هنگام خاموش/حذف شدن کلاینت"""
+    user_status.pop(user_id, None)
+    clients.pop(user_id, None)
+
 
 def register_handlers(client: TelegramClient):
     """
@@ -107,24 +181,33 @@ def register_handlers(client: TelegramClient):
         print(f"⚠️ خطای ریجستری ویژگی‌های سلف‌بات: {e}")
 
 
-async def init_single_client(user_id: int, semaphore: asyncio.Semaphore):
-    async with semaphore:
+async def init_single_client(user_id: int, semaphore: asyncio.Semaphore = None):
+    """
+    semaphore اختیاریه: اگه پاس داده نشه از سمافور مشترک ماژول استفاده می‌شه
+    (برای جلوگیری از باز شدن هم‌زمان تعداد زیاد کانکشن، چه در لود اولیه چه در حین اجرا)
+    """
+    sem = semaphore or _connection_semaphore
+    async with sem:
+        # جلوگیری از لود دوباره‌ی کلاینتی که از قبل زنده و متصله
+        if user_id in clients and clients[user_id].is_connected():
+            user_status[user_id] = True
+            return
+
         try:
             client = create_client(user_id)
             await client.connect()
-            
+
             if await client.is_user_authorized():
-                clients[user_id] = client
-                register_handlers(client)
-                
+                activate_client(client, user_id)  # 👈 مسیر واحد فعال‌سازی (گارد + هندلرها + وضعیت)
+
                 async def safe_run():
                     try:
                         await client.run_until_disconnected()
                     except Exception as loop_err:
                         print(f"⚠️ کلاینت کاربر {user_id} قطع شد: {loop_err}")
                     finally:
+                        deactivate_client(user_id)
                         try:
-                            # تغییر به ساختار جدید
                             query = supabase.table("users_diamonds").update({"is_active": False}).eq("user_id", user_id)
                             await db_execute(query)
                             print(f"📉 وضعیت کاربر {user_id} غیرفعال شد.")
@@ -141,7 +224,7 @@ async def init_single_client(user_id: int, semaphore: asyncio.Semaphore):
                     await db_execute(query)
                 except Exception:
                     pass
-        
+
         except Exception as e:
             print(f"❌ خطا در لود سشن {user_id}: {e}")
             try:
@@ -149,8 +232,9 @@ async def init_single_client(user_id: int, semaphore: asyncio.Semaphore):
                 await db_execute(query)
             except Exception:
                 pass
-        
-        await asyncio.sleep(0.1)
+
+    await asyncio.sleep(0.1)
+
 
 async def load_existing_sessions():
     print("🔍 در حال بررسی و لود سشن‌های موجود...")
@@ -159,10 +243,9 @@ async def load_existing_sessions():
 
     valid_users = set()
     try:
-        # تغییر به ساختار جدید (ایجاد کوئری و سپس await db_execute)
         query = supabase.table("users_diamonds").select("user_id").gt("diamonds", 0).eq("is_active", True)
         response = await db_execute(query)
-            
+
         if response.data:
             valid_users = {int(row["user_id"]) for row in response.data}
         print(f"💰 تعداد {len(valid_users)} کاربر مجاز دریافت شد.")
@@ -171,7 +254,6 @@ async def load_existing_sessions():
         return
 
     session_tasks = []
-    connection_semaphore = asyncio.Semaphore(50) 
 
     for filename in os.listdir("new_sessions"):
         if filename.endswith(".session"):
@@ -181,10 +263,49 @@ async def load_existing_sessions():
                 if user_id not in valid_users:
                     continue
 
-                task = init_single_client(user_id, connection_semaphore)
+                task = init_single_client(user_id, _connection_semaphore)
                 session_tasks.append(task)
 
     if session_tasks:
         print(f"⚡ در حال لود موازی {len(session_tasks)} کلاینت...")
         await asyncio.gather(*session_tasks)
-        print("✅ فرآیند بارگذاری به پایان رسید.")        
+        print("✅ فرآیند بارگذاری به پایان رسید.")
+
+
+async def status_watcher():
+    """
+    تسک پس‌زمینه‌ای که هر STATUS_POLL_INTERVAL ثانیه یک‌بار، با فقط
+    یک کوئری دیتابیس، وضعیت همه‌ی کاربران رو می‌خونه:
+
+    - اگه کلاینت کاربر از قبل زنده باشه: فقط فلگ user_status آپدیت می‌شه
+      (فوری و بدون قطع/وصل شدن سشن - همون چیزی که باعث فعال‌سازی/غیرفعال‌سازی
+      لحظه‌ای هندلرها می‌شه)
+    - اگه کاربر تازه شارژ شده و هیچ کلاینتی براش بالا نیومده: یک کلاینت
+      جدید با استفاده از سمافور مشترک زنده می‌شه (بدون اسپایک ناگهانی کانکشن)
+
+    توجه: عمداً از یک کوئری bulk استفاده شده (نه یک کوئری به‌ازای هر کاربر)
+    تا با ۱۰۰۰+ کاربر هم فشار به دیتابیس و شبکه کم بمونه.
+    """
+    while True:
+        try:
+            query = supabase.table("users_diamonds").select("user_id, diamonds, is_active")
+            response = await db_execute(query)
+            rows = response.data or []
+
+            for row in rows:
+                user_id = int(row["user_id"])
+                allowed = bool((row.get("diamonds") or 0) > 0 and row.get("is_active"))
+
+                if user_id in clients:
+                    # کلاینت زنده‌ست؛ فقط فلگ آپدیت می‌شه -> اثر فوری روی گارد
+                    user_status[user_id] = allowed
+                elif allowed:
+                    # کاربر تازه مجاز شده ولی کلاینتی نداره -> تلاش برای بالا آوردنش
+                    session_path = os.path.join("new_sessions", f"{user_id}.session")
+                    if os.path.exists(session_path):
+                        asyncio.create_task(init_single_client(user_id))
+
+        except Exception as e:
+            print(f"⚠️ خطای status_watcher: {e}")
+
+        await asyncio.sleep(STATUS_POLL_INTERVAL)

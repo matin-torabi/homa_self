@@ -30,7 +30,8 @@ async def handle_balance_request(update: Update, context: ContextTypes.DEFAULT_T
     text = (
         f"👤 <b>کاربر:</b> {user_mention}\n"
         f"🆔 <b>آیدی عددی:</b> <code>{user.id}</code>\n"
-        f"💰 <b>طلای شما:</b> <code>{current_balance:,}</code> طلا"
+        f"💰 <b>طلای شما:</b> <code>{current_balance:,}</code> طلا\n"
+        f"💵 <b>معادل تومان:</b> <code>{current_balance * 35:,}</code> تومان"
     )
     await update.message.reply_text(text, parse_mode="HTML")
 
@@ -79,12 +80,16 @@ async def handle_transfer_request(update: Update, context: ContextTypes.DEFAULT_
     await update_balance(from_user.id, -amount)
     await update_balance(to_user.id, amount)
 
+    new_balance = await get_balance(from_user.id)
+
     success_text = (
         f"✅ <b>واریز موفقیت‌آمیز بود!</b>\n\n"
         f"👤 <b>فرستنده:</b> {from_mention} (<code>{from_user.id}</code>)\n"
         f"👤 <b>گیرنده:</b> {to_mention} (<code>{to_user.id}</code>)\n"
         f"💰 <b>مقدار منتقل شده:</b> {amount:,} طلا\n"
-        f"🔹 <b>موجودی جدید شما:</b> {await get_balance(from_user.id):,} طلا"
+        f"💵 <b>معادل تومان:</b> {(amount * 35):,} تومان\n\n"
+        f"💰 <b>موجودی جدید شما:</b> {new_balance:,} طلا\n"
+        f"💵 <b>معادل تومان:</b> {(new_balance * 35):,} تومان"
     )
     await message.reply_text(success_text, parse_mode="HTML")
 
