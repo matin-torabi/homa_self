@@ -803,7 +803,9 @@ async def handle_panel_clicks(update, context):
             "**دستورات بخش لوگو:**\n\n"
             "> دستورات\n"
             "\n"
-            ">  `\*لوگو مهدی`"  
+            ">  `\*لوگو Matin`"  
+            "\n"            
+            "> نکته: حتما انگلیسی بنویسید\n"
         )
         
         keyboard = [[InlineKeyboardButton("« بازگشت", callback_data=f"panel_sett_{owner_id}", style="primary")]]

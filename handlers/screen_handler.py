@@ -9,7 +9,6 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 from telethon import events
 from telethon.tl.types import DocumentAttributeSticker, InputStickerSetEmpty
 
-# 📌 پوشه‌ای که همین فایل پایتون داخلشه (مستقل از cwd پروسه در زمان اجرا)
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 CONFIG = {
