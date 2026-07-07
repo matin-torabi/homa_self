@@ -157,35 +157,31 @@ async def handle_dice_clicks(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         # قرعه‌کشی (مساوی هم در نظر گرفته شد: عدد ۳)
         # ۱: برد سازنده، ۲: برد حریف، ۳: مساوی
-        result = random.choice([1, 2, 3])
+        # قرعه‌کشی: ۱: برد سازنده، ۲: برد حریف
+        result = random.choice([1, 2])
 
-        if result == 3:  # مساوی
-            await update_diamonds(game["creator_id"], bet)
-            await update_diamonds(user.id, bet)
-            await query.edit_message_text("🤝 بازی مساوی شد! طلاها به هر دو نفر بازگشت.")
+        if result == 1:
+            winner_id, winner_name = game["creator_id"], game["creator_name"]
+            loser_id, loser_name = game["opponent_id"], game["opponent_name"]
         else:
-            if result == 1:
-                winner_id, winner_name = game["creator_id"], game["creator_name"]
-                loser_id, loser_name = game["opponent_id"], game["opponent_name"]
-            else:
-                winner_id, winner_name = game["opponent_id"], game["opponent_name"]
-                loser_id, loser_name = game["creator_id"], game["creator_name"]
+            winner_id, winner_name = game["opponent_id"], game["opponent_name"]
+            loser_id, loser_name = game["creator_id"], game["creator_name"]
 
-            # پرداخت جایزه به برنده (مجموع دو شرط)
-            await update_diamonds(winner_id, 2 * bet)
-            await add_win_to_ranking(winner_id, winner_name)
+        # پرداخت جایزه به برنده (مجموع دو شرط)
+        await update_diamonds(winner_id, 2 * bet)
+        await add_win_to_ranking(winner_id, winner_name)
 
-            winner_balance = await get_user_diamonds(winner_id)
-            loser_balance = await get_user_diamonds(loser_id)
+        winner_balance = await get_user_diamonds(winner_id)
+        loser_balance = await get_user_diamonds(loser_id)
 
-            await query.edit_message_text(
-                f"<b>بازی به پایان رسید!</b>\n\n"
-                f"👑 برنده: {winner_name}\n"
-                f"💰 موجودی برنده: {winner_balance}\n"
-                f"🥶 بازنده: {loser_name}\n"
-                f"💰 موجودی بازنده: {loser_balance}",
-                parse_mode="HTML"
-            )
+        await query.edit_message_text(
+            f"<b>بازی به پایان رسید!</b>\n\n"
+            f"👑 برنده: {winner_name}\n"
+            f"💰 موجودی برنده: {winner_balance}\n"
+            f"💸 بازنده: {loser_name}\n"
+            f"💰 موجودی بازنده: {loser_balance}",
+            parse_mode="HTML"
+        )
 
         del ACTIVE_DICE_GAMES[game_id]
 
